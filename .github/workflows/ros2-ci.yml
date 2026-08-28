@@ -17,6 +17,11 @@ jobs:
         with:
           required-ros-distributions: jazzy
 
+      - name: Initialize rosdep
+        shell: bash
+        run: |
+          rosdep update
+
       - name: Install ROS dependencies
         shell: bash
         run: |
