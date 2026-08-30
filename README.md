@@ -344,7 +344,150 @@ status_system.launch.py
         |             v
         +---- /status_subscriber
 ```
+## ROS 2 Communication Patterns
 
+RobustLearn-Manip currently demonstrates three ROS 2 communication patterns: topics, services, and actions.
+
+### Topics
+
+Topics are used for continuous or event-driven streams of data.
+
+Current example:
+
+```text
+/status_publisher
+       |
+       | std_msgs/msg/String
+       v
+/system_status
+       |
+       v
+/status_subscriber
+```
+
+Topics are appropriate for data such as:
+
+- joint states
+- force/torque measurements
+- camera frames
+- robot status
+- sensor streams
+
+A topic publisher sends data without waiting for a response from each subscriber.
+
+### Services
+
+Services provide request-response communication.
+
+The project defines:
+
+```text
+robustlearn_interfaces/srv/SetSystemMode
+```
+
+Interface:
+
+```text
+string mode
+---
+bool success
+string message
+```
+
+The communication pattern is:
+
+```text
+system_mode_client
+        |
+        | request
+        v
+/set_system_mode
+        |
+        v
+system_mode_server
+        |
+        | response
+        v
+system_mode_client
+```
+
+Example request:
+
+```text
+mode: "READY"
+```
+
+Example response:
+
+```text
+success: true
+message: "System mode set to READY"
+```
+
+Services are appropriate for relatively short operations where the caller expects a direct response, such as configuration changes, resets, or state queries.
+
+### Actions
+
+Actions support longer-running operations with goal acceptance, intermediate feedback, final results, and cancellation.
+
+The project defines:
+
+```text
+robustlearn_interfaces/action/ExecuteSystemCheck
+```
+
+Interface:
+
+```text
+int32 total_steps
+---
+bool success
+string message
+---
+int32 completed_steps
+float32 progress
+```
+
+The communication pattern is:
+
+```text
+system_check_action_client
+            |
+            | goal
+            v
+/execute_system_check
+            |
+            v
+system_check_action_server
+            |
+            +---- feedback
+            +---- feedback
+            +---- feedback
+            |
+            +---- result
+```
+
+The server rejects goals with non-positive step counts.
+
+Accepted goals publish progress feedback while executing and return a final success result when complete.
+
+Clients can also request cancellation while an action is executing.
+
+Actions are appropriate for operations such as:
+
+- trajectory execution
+- motion to a target pose
+- insertion procedures
+- calibration routines
+- other operations that take time and may need cancellation
+
+### Topic vs Service vs Action
+
+| Pattern | Communication | Feedback | Result | Cancellation | Typical use |
+|---|---|---|---|---|---|
+| Topic | streaming | no direct request feedback | no | no | sensors, status, joint states |
+| Service | request-response | no intermediate feedback | yes | generally no | reset, configure, query |
+| Action | goal-based asynchronous operation | yes | yes | yes | motion, trajectory execution, long-running tasks |
 ## Continuous Integration
 
 Two GitHub Actions workflows currently validate the repository.
