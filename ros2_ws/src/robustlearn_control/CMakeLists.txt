@@ -9,6 +9,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(robustlearn_interfaces REQUIRED)
+find_package(rclcpp_action REQUIRED)
 
 add_executable(status_publisher src/status_publisher.cpp)
 
@@ -26,10 +28,54 @@ ament_target_dependencies(
   std_msgs
 )
 
+add_executable(system_mode_server src/system_mode_server.cpp)
+
+ament_target_dependencies(
+  system_mode_server
+  rclcpp
+  robustlearn_interfaces
+)
+
+add_executable(system_mode_client src/system_mode_client.cpp)
+
+ament_target_dependencies(
+  system_mode_client
+  rclcpp
+  robustlearn_interfaces
+)
+
+add_executable(
+  system_check_action_server
+  src/system_check_action_server.cpp
+)
+
+ament_target_dependencies(
+  system_check_action_server
+  rclcpp
+  rclcpp_action
+  robustlearn_interfaces
+)
+
+add_executable(
+  system_check_action_client
+  src/system_check_action_client.cpp
+)
+
+ament_target_dependencies(
+  system_check_action_client
+  rclcpp
+  rclcpp_action
+  robustlearn_interfaces
+)
+
 install(
   TARGETS
     status_publisher
     status_subscriber
+    system_mode_server
+    system_mode_client
+    system_check_action_server
+    system_check_action_client
   DESTINATION lib/${PROJECT_NAME}
 )
 
