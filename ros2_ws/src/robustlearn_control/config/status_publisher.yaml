@@ -1,0 +1,4 @@
+status_publisher:
+  ros__parameters:
+    message_prefix: "RobustLearn configured status "
+    publish_period_ms: 750
