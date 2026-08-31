@@ -56,6 +56,12 @@ ament_target_dependencies(
   robustlearn_interfaces
 )
 
+target_include_directories(
+  system_check_action_server
+  PRIVATE
+    include
+)
+
 add_executable(
   system_check_action_client
   src/system_check_action_client.cpp
@@ -88,14 +94,29 @@ install(
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
+
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
+
   ament_lint_auto_find_test_dependencies()
+
+  ament_add_gtest(
+    test_system_check_validation
+    test/test_system_check_validation.cpp
+  )
+
+  target_include_directories(
+    test_system_check_validation
+    PRIVATE
+      include
+  )
+
+  add_launch_test(
+    test/test_status_publisher_launch.py
+    TIMEOUT 10
+  )
 endif()
 
 ament_package()

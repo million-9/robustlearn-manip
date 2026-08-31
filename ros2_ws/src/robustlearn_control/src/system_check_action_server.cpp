@@ -6,6 +6,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "robustlearn_interfaces/action/execute_system_check.hpp"
+#include "robustlearn_control/system_check_validation.hpp"
 
 using namespace std::chrono_literals;
 
@@ -56,7 +57,7 @@ private:
       "Received system check goal with %d steps",
       goal->total_steps);
 
-    if (goal->total_steps <= 0) {
+    if (!robustlearn_control::is_valid_total_steps(goal->total_steps)) {
       RCLCPP_WARN(
         this->get_logger(),
         "Rejecting goal: total_steps must be greater than zero");
