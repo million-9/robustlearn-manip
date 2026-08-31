@@ -25,7 +25,7 @@ public:
     }
 
     publisher_ = this->create_publisher<std_msgs::msg::String>(
-      "system_status", 10);
+      "system_status_broken", 10);
 
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(publish_period_ms),
