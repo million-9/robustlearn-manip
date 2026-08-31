@@ -1,3 +1,10 @@
+## Reproducibility Principle
+
+Detailed fresh-clone setup and validation instructions are available in
+[`docs/reproducibility.md`](docs/reproducibility.md).
+
+A project result is not considered complete merely because it works in the original development environment.
+
 # RobustLearn-Manip
 
 Deployment-oriented robot-learning manipulation project for contact-rich assembly.
