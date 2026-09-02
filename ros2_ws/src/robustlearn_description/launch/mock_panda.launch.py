@@ -26,6 +26,7 @@ def generate_launch_description():
     )
 
     panda_xacro = package_share / 'urdf' / 'panda.urdf.xacro'
+    controllers_yaml = package_share / 'config' / 'controllers.yaml'
 
     robot_description = {
         'robot_description': Command(
@@ -43,13 +44,31 @@ def generate_launch_description():
     controller_manager = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[
-            {
-                'update_rate': 100,
-            }
-        ],
+        parameters=[str(controllers_yaml)],
         remappings=[
             ('~/robot_description', '/robot_description'),
+        ],
+        output='screen',
+    )
+
+    joint_state_broadcaster_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'joint_state_broadcaster',
+            '--controller-manager',
+            '/controller_manager',
+        ],
+        output='screen',
+    )
+
+    panda_arm_controller_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'panda_arm_controller',
+            '--controller-manager',
+            '/controller_manager',
         ],
         output='screen',
     )
@@ -58,5 +77,7 @@ def generate_launch_description():
         [
             robot_state_publisher,
             controller_manager,
+            joint_state_broadcaster_spawner,
+            panda_arm_controller_spawner,
         ]
     )
