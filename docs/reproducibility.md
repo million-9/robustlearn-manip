@@ -729,3 +729,183 @@ The clean-checkout process will be extended as MuJoCo, robot control,
 planning, learning infrastructure, datasets, trained models, experiment
 configuration, evaluation tooling, and deployment components are added to the
 project.
+
+## Panda Joint Trajectory Validation
+
+The mock Panda trajectory-control path can be validated without MuJoCo or
+physical hardware.
+
+The expected data path is:
+
+```text
+FollowJointTrajectory goal
+        |
+        v
+panda_arm_controller
+        |
+        v
+ros2_control position command interfaces
+        |
+        v
+mock_components/GenericSystem
+        |
+        v
+position and velocity state interfaces
+        |
+        v
+joint_state_broadcaster
+        |
+        v
+/joint_states
+```
+
+### Start the mock Panda
+
+From the ROS workspace:
+
+```bash
+cd ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+ros2 launch robustlearn_description mock_panda.launch.py
+```
+
+Leave this terminal running.
+
+### Verify the trajectory action
+
+In a second terminal:
+
+```bash
+cd ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+ros2 action type /panda_arm_controller/follow_joint_trajectory
+ros2 action info /panda_arm_controller/follow_joint_trajectory
+```
+
+The expected action type is:
+
+```text
+control_msgs/action/FollowJointTrajectory
+```
+
+The controller should expose one action server.
+
+### Monitor the Panda joint state
+
+In another terminal:
+
+```bash
+cd ros2_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+ros2 topic echo /joint_states --field position
+```
+
+### Send a valid seven-joint trajectory
+
+Send a trajectory goal using all seven Panda arm joints:
+
+```bash
+ros2 action send_goal \
+  /panda_arm_controller/follow_joint_trajectory \
+  control_msgs/action/FollowJointTrajectory \
+  "{
+    trajectory: {
+      joint_names: [
+        panda_joint1,
+        panda_joint2,
+        panda_joint3,
+        panda_joint4,
+        panda_joint5,
+        panda_joint6,
+        panda_joint7
+      ],
+      points: [
+        {
+          positions: [0.2, -0.3, 0.1, -1.0, 0.2, 1.0, 0.3],
+          time_from_start: {sec: 5, nanosec: 0}
+        }
+      ]
+    }
+  }" \
+  --feedback
+```
+
+The goal should be accepted and finish successfully.
+
+Expected final action status:
+
+```text
+error_code: 0
+error_string: Goal successfully reached!
+
+Goal finished with status: SUCCEEDED
+```
+
+After execution, inspect one joint-state message:
+
+```bash
+ros2 topic echo /joint_states --once
+```
+
+The final joint positions should correspond to the commanded target:
+
+```text
+[0.2, -0.3, 0.1, -1.0, 0.2, 1.0, 0.3]
+```
+
+### Validate trajectory rejection
+
+A malformed trajectory should be rejected instead of being passed to the
+hardware.
+
+The following goal intentionally contains seven joint names but only six
+position values:
+
+```bash
+ros2 action send_goal \
+  /panda_arm_controller/follow_joint_trajectory \
+  control_msgs/action/FollowJointTrajectory \
+  "{
+    trajectory: {
+      joint_names: [
+        panda_joint1,
+        panda_joint2,
+        panda_joint3,
+        panda_joint4,
+        panda_joint5,
+        panda_joint6,
+        panda_joint7
+      ],
+      points: [
+        {
+          positions: [0.1, -0.2, 0.1, -0.8, 0.2, 0.8],
+          time_from_start: {sec: 3, nanosec: 0}
+        }
+      ]
+    }
+  }" \
+  --feedback
+```
+
+Expected result:
+
+```text
+Goal was rejected.
+```
+
+Verify that the rejected goal did not modify the robot state:
+
+```bash
+ros2 topic echo /joint_states --once
+```
+
+The Panda should remain at its previously commanded configuration.
+
+This validates both successful trajectory execution and understandable
+rejection of structurally invalid trajectory commands.
