@@ -16,11 +16,20 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
+    use_rviz = DeclareLaunchArgument(
+        'use_rviz',
+        default_value='true',
+        description='Start RViz for interactive MoveIt visualization.',
+    )
+
     panda_config_share = Path(
         get_package_share_directory(
             'moveit_resources_panda_moveit_config'
@@ -146,6 +155,9 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         name='rviz2',
+        condition=IfCondition(
+            LaunchConfiguration('use_rviz')
+        ),
         arguments=[
             '-d',
             str(rviz_config),
@@ -162,6 +174,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            use_rviz,
             static_tf,
             robot_state_publisher,
             controller_manager,
