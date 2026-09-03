@@ -23,14 +23,20 @@ from controller_manager_msgs.srv import ListControllers
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-import launch_testing
-import pytest
-import rclpy
+from launch_testing.actions import ReadyToTest
+from pytest import mark
+from rclpy import (
+    create_node,
+    init,
+    ok,
+    shutdown,
+    spin_once,
+    spin_until_future_complete,
+)
 from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
-
 
 JOINT_NAMES = [
     'panda_joint1',
@@ -55,7 +61,7 @@ TARGET_POSITIONS = [
 POSITION_TOLERANCE = 0.02
 
 
-@pytest.mark.launch_test
+@mark.launch_test
 def generate_test_description():
     package_share = get_package_share_directory(
         'robustlearn_moveit_config'
@@ -76,7 +82,7 @@ def generate_test_description():
     return LaunchDescription(
         [
             week3_stack,
-            launch_testing.actions.ReadyToTest(),
+            ReadyToTest(),
         ]
     )
 
@@ -85,15 +91,15 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        rclpy.init()
+        init()
 
     @classmethod
     def tearDownClass(cls):
-        if rclpy.ok():
-            rclpy.shutdown()
+        if ok():
+            shutdown()
 
     def setUp(self):
-        self.node = rclpy.create_node(
+        self.node = create_node(
             'week3_panda_acceptance_test'
         )
 
@@ -118,7 +124,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
         deadline = time.monotonic() + timeout_sec
 
         while time.monotonic() < deadline:
-            rclpy.spin_once(
+            spin_once(
                 self.node,
                 timeout_sec=0.1,
             )
@@ -149,6 +155,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
             zip(
                 self.latest_joint_state.name,
                 self.latest_joint_state.position,
+                strict=True,
             )
         )
 
@@ -159,6 +166,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
             for joint_name, target_position in zip(
                 JOINT_NAMES,
                 TARGET_POSITIONS,
+                strict=True,
             )
         )
 
@@ -171,7 +179,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
 
         while time.monotonic() < deadline:
             if not controller_client.service_is_ready():
-                rclpy.spin_once(
+                spin_once(
                     self.node,
                     timeout_sec=0.1,
                 )
@@ -181,7 +189,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
                 ListControllers.Request()
             )
 
-            rclpy.spin_until_future_complete(
+            spin_until_future_complete(
                 self.node,
                 future,
                 timeout_sec=2.0,
@@ -300,7 +308,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
             goal
         )
 
-        rclpy.spin_until_future_complete(
+        spin_until_future_complete(
             self.node,
             goal_future,
             timeout_sec=10.0,
@@ -325,7 +333,7 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
 
         result_future = goal_handle.get_result_async()
 
-        rclpy.spin_until_future_complete(
+        spin_until_future_complete(
             self.node,
             result_future,
             timeout_sec=15.0,
@@ -373,12 +381,14 @@ class TestWeek3PandaAcceptance(unittest.TestCase):
             zip(
                 self.latest_joint_state.name,
                 self.latest_joint_state.position,
+                strict=True,
             )
         )
 
         for joint_name, target_position in zip(
             JOINT_NAMES,
             TARGET_POSITIONS,
+            strict=True,
         ):
             self.assertAlmostEqual(
                 final_positions[joint_name],
