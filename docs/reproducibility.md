@@ -909,3 +909,226 @@ The Panda should remain at its previously commanded configuration.
 
 This validates both successful trajectory execution and understandable
 rejection of structurally invalid trajectory commands.
+
+## Week 3 Panda Control Acceptance Workflow
+
+Week 3 integrates the Panda robot description, `ros2_control`, trajectory
+control, MoveIt 2, and RViz into one validated manipulation-control stack.
+
+The acceptance path is:
+
+```text
+MoveIt / RViz
+      |
+      v
+   move_group
+      |
+      v
+panda_arm_controller
+      |
+      v
+FollowJointTrajectory
+      |
+      v
+  ros2_control
+      |
+      v
+mock_components/GenericSystem
+      |
+      v
+state interfaces
+      |
+      v
+joint_state_broadcaster
+      |
+      v
+ /joint_states
+```
+
+The Week 3 acceptance gate is a monitored trajectory command sent to the
+mock Panda, followed by verification that the commanded state is reflected
+through `/joint_states`.
+
+### Build and source the workspace
+
+From the repository root:
+
+```bash
+cd ros2_ws
+
+source /opt/ros/jazzy/setup.bash
+
+colcon build --symlink-install
+
+source install/setup.bash
+```
+
+### Interactive MoveIt and RViz validation
+
+Launch the full Panda planning environment:
+
+```bash
+ros2 launch robustlearn_moveit_config moveit_demo.launch.py
+```
+
+The launch starts:
+
+```text
+robot_state_publisher
+controller_manager
+joint_state_broadcaster
+panda_arm_controller
+move_group
+RViz
+```
+
+Verify the controllers in a second terminal:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/projects/robustlearn-manip/ros2_ws/install/setup.bash
+
+ros2 control list_controllers
+```
+
+Both of the following controllers should report `active`:
+
+```text
+joint_state_broadcaster
+panda_arm_controller
+```
+
+Verify that the Panda trajectory action is available:
+
+```bash
+ros2 action info \
+  /panda_arm_controller/follow_joint_trajectory
+```
+
+The action type is:
+
+```text
+control_msgs/action/FollowJointTrajectory
+```
+
+Verify the robot-state stream:
+
+```bash
+ros2 topic echo /joint_states --once
+```
+
+The message should contain all seven Panda arm joints:
+
+```text
+panda_joint1
+panda_joint2
+panda_joint3
+panda_joint4
+panda_joint5
+panda_joint6
+panda_joint7
+```
+
+In RViz, use the MotionPlanning panel with the planning group:
+
+```text
+panda_arm
+```
+
+Select a valid goal state and click `Plan`.
+
+A successful validation displays the start state, goal state, and generated
+collision-free trajectory in RViz.
+
+### Headless Week 3 stack
+
+The same stack can be launched without RViz:
+
+```bash
+ros2 launch robustlearn_moveit_config \
+  moveit_demo.launch.py \
+  use_rviz:=false
+```
+
+This mode is intended for automated testing and CI.
+
+It retains the Panda description, TF, `ros2_control`, controllers, and
+`move_group`, but does not start the graphical RViz process.
+
+### Automated acceptance test
+
+The Week 3 acceptance workflow is exercised automatically by:
+
+```text
+robustlearn_moveit_config/test/test_week3_acceptance_launch.py
+```
+
+Run it with:
+
+```bash
+cd ros2_ws
+
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+colcon test \
+  --packages-select robustlearn_moveit_config \
+  --event-handlers console_direct+
+
+colcon test-result \
+  --test-result-base build/robustlearn_moveit_config \
+  --verbose
+```
+
+The launch test verifies that:
+
+- `joint_state_broadcaster` becomes active
+- `panda_arm_controller` becomes active
+- `/joint_states` contains all seven Panda arm joints
+- the `FollowJointTrajectory` server becomes available
+- a seven-joint trajectory goal is accepted
+- trajectory execution completes successfully
+- final joint positions agree with the commanded target within the configured
+  tolerance
+
+The automated target is:
+
+```text
+panda_joint1   0.15
+panda_joint2  -0.65
+panda_joint3   0.10
+panda_joint4  -2.10
+panda_joint5   0.10
+panda_joint6   1.70
+panda_joint7   0.65
+```
+
+The acceptance-test joint-position tolerance is:
+
+```text
+0.02 rad
+```
+
+### Week 3 acceptance result
+
+Week 3 is considered complete when all of the following are true:
+
+```text
+Panda robot description loads             PASS
+controller_manager starts                 PASS
+joint_state_broadcaster active            PASS
+panda_arm_controller active               PASS
+seven-joint /joint_states available       PASS
+FollowJointTrajectory action available    PASS
+monitored trajectory accepted             PASS
+trajectory execution succeeds             PASS
+final state matches commanded target      PASS
+MoveIt panda_arm planning works           PASS
+trajectory visible in RViz                PASS
+automated acceptance test passes          PASS
+ROS 2 CI                                  PASS
+```
+
+MuJoCo dynamics, contact physics, deterministic simulation resets, the custom
+MuJoCo `ros2_control` hardware interface, Gymnasium environments, and learned
+policies remain intentionally deferred to later milestones.
