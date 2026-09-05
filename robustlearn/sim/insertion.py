@@ -5,6 +5,7 @@ from pathlib import Path
 import mujoco
 
 from robustlearn.sim.panda import panda_model_path, project_root
+from robustlearn.sim.sensing import add_panda_sensors
 
 
 def insertion_asset_directory() -> Path:
@@ -62,6 +63,8 @@ def load_insertion_model() -> mujoco.MjModel:
         "",
         "",
     )
+
+    add_panda_sensors(panda_spec)
 
     panda_spec.modelname = "robustlearn panda insertion task"
 

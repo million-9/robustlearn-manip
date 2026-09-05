@@ -42,6 +42,24 @@
           group="3"
         />
 
+        <!--
+          Project-owned wrist force/torque sensing frame.
+
+          The site is attached to peg_tool, whose direct parent is the Panda
+          hand. MuJoCo force/torque sensors therefore measure the wrench
+          transmitted across the hand -> peg_tool boundary.
+
+          The site has no relative rotation, so reported wrench components
+          are expressed in the peg_tool-local frame.
+        -->
+        <site
+          name="panda_wrist_ft"
+          pos="0 0 0"
+          type="sphere"
+          size="0.003"
+          rgba="0 0 0 0"
+        />
+
         <site
           name="peg_tip"
           pos="0 0 0.085"
