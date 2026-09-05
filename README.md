@@ -32,7 +32,10 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 2: ROS 2 C++ communication and runtime configuration.**
+**Week 4: deterministic MuJoCo manipulation environment foundation.**
+
+The project has progressed through the initial repository, ROS 2 communication,
+robot-description, and MuJoCo simulation foundations.
 
 Completed so far:
 
@@ -42,21 +45,43 @@ Completed so far:
 - Python 3.12 environment managed with `uv`
 - CMake and `colcon` build workflow verified
 - `rosdep` configured
-- Python package initialized
 - pytest, Ruff, and mypy configured
 - Python CI running in GitHub Actions
 - ROS 2 CI running in GitHub Actions
-- clean-checkout reproducibility verified
-- initial `robustlearn_interfaces` ROS 2 package created
-- `robustlearn_control` C++ ROS 2 package created
-- C++ ROS 2 publisher and subscriber implemented
-- publisher/subscriber communication verified through ROS 2 CLI tools
-- ROS 2 runtime parameters added to the publisher
-- command-line parameter overrides verified
-- YAML parameter configuration added
-- ROS 2 launch file added to start the publisher and subscriber together
-- parameter validation added for invalid publication periods
-- ROS 2 build, lint, and test checks passing
+- clean-checkout reproducibility workflow established
+- project-specific ROS 2 interfaces created
+- ROS 2 topic publisher/subscriber communication implemented
+- ROS 2 services implemented
+- ROS 2 actions implemented
+- parameter configuration and validation added
+- YAML runtime configuration added
+- ROS 2 launch workflow added
+- Franka Panda URDF/Xacro and MoveIt-side robot-description work established
+- Franka Panda MuJoCo model vendored from MuJoCo Menagerie
+- MuJoCo model provenance and licensing recorded
+- Panda MuJoCo model loader implemented
+- insertion workcell and task geometry implemented
+- fixed insertion tool and receptacle geometry implemented
+- stable task sites added for insertion reasoning
+- deterministic MuJoCo reset layer implemented
+- project-owned NumPy RNG and seeded reset semantics implemented
+- controlled simulator-state snapshots implemented
+- Gymnasium Panda insertion environment implemented
+- explicit action and observation spaces implemented
+- deterministic Gymnasium reset behavior verified
+- deterministic fixed rollouts verified across independent environments
+- headless MuJoCo execution verified
+- Week 4 end-to-end deterministic acceptance test implemented
+
+The current milestone gate is:
+
+```text
+Seeded environment reproduces state exactly.
+```
+
+This is verified by creating two independent Panda insertion environments,
+resetting both with the same seed, applying the same action sequence, and
+comparing their controlled simulator state exactly.
 
 ## Development Environment
 
@@ -79,28 +104,70 @@ robustlearn-manip/
 │   └── workflows/
 │       ├── python-ci.yml
 │       └── ros2-ci.yml
+│
+├── docs/
+│   ├── determinism.md
+│   ├── gymnasium_environment.md
+│   ├── insertion_task.md
+│   ├── reproducibility.md
+│   └── week4_acceptance.md
+│
+├── robot_description/
+│   └── mjcf/
+│       ├── franka_emika_panda/
+│       │   ├── assets/
+│       │   ├── panda.xml
+│       │   ├── LICENSE
+│       │   └── UPSTREAM.md
+│       └── insertion/
+│           ├── fixed_peg.xml
+│           └── workcell.xml
+│
 ├── robustlearn/
+│   ├── envs/
+│   │   ├── __init__.py
+│   │   └── panda_insertion.py
+│   └── sim/
+│       ├── __init__.py
+│       ├── insertion.py
+│       ├── panda.py
+│       └── simulation.py
+│
 ├── ros2_ws/
 │   └── src/
 │       ├── robustlearn_interfaces/
-│       └── robustlearn_control/
-│           ├── config/
-│           │   └── status_publisher.yaml
-│           ├── include/
-│           │   └── robustlearn_control/
-│           ├── launch/
-│           │   └── status_system.launch.py
-│           ├── src/
-│           │   ├── status_publisher.cpp
-│           │   └── status_subscriber.cpp
-│           ├── CMakeLists.txt
-│           └── package.xml
+│       ├── robustlearn_control/
+│       └── robustlearn_moveit_config/
+│
 ├── tests/
+│   ├── integration/
+│   │   └── test_week4_acceptance.py
+│   └── unit/
+│       ├── test_import.py
+│       ├── test_insertion_model.py
+│       ├── test_panda_insertion_env.py
+│       ├── test_panda_model.py
+│       └── test_simulation.py
+│
+├── tools/
+│   └── view_insertion.py
+│
 ├── pyproject.toml
+├── uv.lock
 └── README.md
 ```
 
-The repository will expand as simulation, robot control, planning, learning, deployment, and evaluation components are introduced.
+The repository separates:
+
+```text
+ROS 2 / MoveIt representation
+        from
+MuJoCo physics / task representation
+```
+
+The MJCF model is authoritative for MuJoCo physics and manipulation-task
+simulation, while URDF/Xacro remains responsible for the ROS 2, MoveIt 2, and
+`ros2_control` software representation.
 
 ## Python Environment Setup
 
@@ -142,6 +209,218 @@ uv run pytest
 ```
 
 These checks are also run automatically by GitHub Actions.
+
+## Week 4 MuJoCo Manipulation Foundation
+
+Week 4 introduces the first complete manipulation-simulation stack in
+RobustLearn-Manip.
+
+The implemented pipeline is:
+
+```text
+vendored Franka Panda MJCF
+          |
+          v
+project-owned insertion workcell
+          |
+          v
+MuJoCo model compilation
+          |
+          v
+deterministic simulation wrapper
+          |
+          v
+Gymnasium environment
+          |
+          v
+seeded deterministic reset and rollout
+```
+
+### Franka Panda MuJoCo Model
+
+The Panda physics model is stored under:
+
+```text
+robot_description/mjcf/franka_emika_panda/
+```
+
+The model is vendored from MuJoCo Menagerie so that simulation does not depend
+on an external checkout or machine-specific paths.
+
+The exact upstream revision is documented in:
+
+```text
+robot_description/mjcf/franka_emika_panda/UPSTREAM.md
+```
+
+and the upstream license is preserved in:
+
+```text
+robot_description/mjcf/franka_emika_panda/LICENSE
+```
+
+The vendored Panda model is not modified with project-specific task geometry.
+
+### Insertion Workcell
+
+Insertion-specific geometry is maintained separately under:
+
+```text
+robot_description/mjcf/insertion/
+```
+
+The current workcell contains:
+
+```text
+fixed Panda-mounted insertion tool
+workstation
+insertion fixture
+square receptacle
+```
+
+Stable task references include:
+
+```text
+peg_tip
+receptacle_center
+insertion_axis
+pre_insertion
+```
+
+### Deterministic Simulation
+
+The deterministic MuJoCo wrapper is:
+
+```text
+robustlearn.sim.MuJoCoSimulation
+```
+
+It owns:
+
+```text
+MjModel
+MjData
+physics stepping
+reset behavior
+project RNG
+controlled-state snapshots
+```
+
+Example:
+
+```python
+from robustlearn.sim import MuJoCoSimulation
+
+simulation = MuJoCoSimulation()
+
+snapshot = simulation.reset(seed=2026)
+
+simulation.step(5)
+```
+
+The reset workflow explicitly clears episode-dependent simulator inputs and
+solver warm-start state before reconstructing the canonical start state.
+
+### Gymnasium Environment
+
+The MuJoCo simulator is exposed through:
+
+```text
+robustlearn.envs.PandaInsertionEnv
+```
+
+Example:
+
+```python
+from robustlearn.envs import PandaInsertionEnv
+
+env = PandaInsertionEnv()
+
+observation, info = env.reset(seed=2026)
+
+action = env.action_space.sample()
+
+observation, reward, terminated, truncated, info = env.step(action)
+
+env.close()
+```
+
+The current Week 4 environment has:
+
+```text
+action shape:       (8,)
+observation shape:  (30,)
+```
+
+The action vector currently corresponds to the MuJoCo actuator controls.
+
+The observation contains:
+
+```text
+qpos
+qvel
+four task-site world positions
+```
+
+This is intentionally a Week 4 scaffold and is not yet the final learned-policy
+state/action interface.
+
+### Week 4 Determinism Acceptance Gate
+
+The complete acceptance test is:
+
+```text
+tests/integration/test_week4_acceptance.py
+```
+
+Run it with:
+
+```bash
+uv run pytest \
+  tests/integration/test_week4_acceptance.py \
+  -v
+```
+
+The test creates two independent environments:
+
+```text
+Environment A                 Environment B
+      |                             |
+      v                             v
+reset(seed=2026)              reset(seed=2026)
+      |                             |
+      v                             v
+snapshot A                    snapshot B
+      |                             |
+      +------------ == -------------+
+```
+
+The same deterministic action sequence is then applied to both environments.
+
+The acceptance requirement is:
+
+```text
+same model
++ same seed
++ same reset configuration
++ same action sequence
+=
+same controlled simulator state
+```
+
+All controlled reset-state comparisons use exact NumPy array equality.
+
+The environment also verifies that simulation state remains finite throughout
+the acceptance rollout.
+
+More details are available in:
+
+```text
+docs/determinism.md
+docs/insertion_task.md
+docs/gymnasium_environment.md
+docs/week4_acceptance.md
+```
 
 ## ROS 2 Workspace Setup
 
@@ -673,10 +952,76 @@ Claims about task success, robustness, latency, or learning performance will onl
 
 ## Project Status
 
-RobustLearn-Manip is currently in the **ROS 2 foundations phase**.
+RobustLearn-Manip has completed the **Week 4 deterministic MuJoCo manipulation
+foundation**.
 
-The repository now demonstrates working project-specific C++ ROS 2 communication, runtime parameter configuration, YAML configuration, launch-based multi-node execution, automated build/test validation, and a reproducible Git/GitHub development workflow.
+The repository now demonstrates:
 
-MuJoCo manipulation, `ros2_control`, MoveIt 2, learning algorithms, domain randomisation, ONNX deployment, and final performance benchmarks have **not yet been implemented** and should not be interpreted as completed capabilities.
+```text
+ROS 2 communication foundations
+        |
+        v
+Franka Panda robot representations
+        |
+        v
+MuJoCo Panda physics model
+        |
+        v
+insertion workcell geometry
+        |
+        v
+deterministic simulation wrapper
+        |
+        v
+Gymnasium manipulation environment
+        |
+        v
+deterministic Week 4 acceptance workflow
+```
 
-The project is being developed incrementally, with each capability required to pass its acceptance gate before later stages are treated as complete.
+The Week 4 milestone is considered successful when:
+
+```text
+Seeded environment reproduces state exactly.
+```
+
+That behavior is covered by automated regression testing.
+
+Current implemented simulation capabilities include:
+
+- committed Panda MJCF assets
+- traceable MuJoCo Menagerie provenance
+- committed insertion workcell assets
+- headless MuJoCo model compilation and stepping
+- deterministic seeded simulator reset
+- controlled-state snapshots
+- project-owned NumPy RNG
+- Gymnasium reset and step APIs
+- explicit action and observation spaces
+- explicit episode truncation
+- deterministic fixed rollouts
+- finite-state smoke validation
+- automated Week 4 integration acceptance testing
+
+The project has **not yet** implemented:
+
+- wrist force/torque sensing
+- RGB or depth cameras
+- final task success/failure logic
+- full scripted insertion completion
+- domain randomization
+- formal task configuration schemas
+- final learned-policy state/action interfaces
+- `ros2_control` execution backed by MuJoCo
+- MoveIt trajectory execution in MuJoCo
+- behavior cloning
+- DAgger
+- SAC reinforcement learning
+- ONNX policy deployment
+- final task-success, robustness, or latency benchmarks
+
+Those capabilities belong to later milestones and will be added only after
+their own acceptance criteria are satisfied.
+
+The project continues to follow the principle that capabilities are not treated
+as complete until they are reproducible, tested, and documented.
