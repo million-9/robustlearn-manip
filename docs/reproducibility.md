@@ -1,70 +1,3 @@
-# Reproducibility Guide
-
-This document describes how to reproduce the RobustLearn-Manip development
-environment and validation workflow from a fresh clone.
-
-The purpose of this guide is to ensure that the project does not depend on
-hidden state from the original development checkout, such as an existing
-Python virtual environment or previously generated ROS 2 build artifacts.
-
-A successful clean-checkout reproduction starts without:
-
-- `.venv/`
-- `ros2_ws/build/`
-- `ros2_ws/install/`
-- `ros2_ws/log/`
-
-These directories are generated locally and must not be committed.
-
-## Supported Development Environment
-
-The current project environment assumes:
-
-- Ubuntu 24.04 LTS
-- ROS 2 Jazzy
-- Python 3.12
-- `uv` for Python dependency management
-- `rosdep` for ROS dependency installation
-- `colcon` for ROS workspace builds
-- CMake / ament for ROS 2 C++ packages
-- Git for version control
-- GitHub Actions for continuous integration
-
-The GitHub Actions workflows also run on Ubuntu 24.04 and use ROS 2 Jazzy.
-
-## 1. Fresh Clone
-
-Clone the repository into a new directory:
-
-```bash
-git clone https://github.com/million-9/robustlearn-manip.git
-cd robustlearn-manip
-```
-
-Confirm that the checkout is clean:
-
-```bash
-git status
-```
-
-Expected result:
-
-```text
-On branch main
-nothing to commit, working tree clean
-```
-
-A fresh checkout should not contain an existing Python virtual environment or
-ROS 2 build products.
-
-For example:
-
-```bash
-ls -d .venv ros2_ws/build ros2_ws/install ros2_ws/log 2>/dev/null
-```
-
-On a completely fresh checkout, these paths should not exist.
-
 ## 2. Python Environment
 
 The project uses Python 3.12 and `uv`.
@@ -101,1034 +34,217 @@ The `--locked` option requires dependency installation to remain consistent
 with the committed lock file instead of silently changing dependency
 resolution.
 
-## 3. Python Validation
+### MuJoCo Runtime Dependency
 
-Run the Python quality checks from the repository root:
+MuJoCo is a runtime dependency of RobustLearn-Manip and is managed through the
+normal `uv` dependency workflow.
+
+A separate system-wide MuJoCo installation or manual:
+
+```bash
+pip install mujoco
+```
+
+step is not required.
+
+MuJoCo is declared in `pyproject.toml`, while the exact resolved dependency
+versions are recorded in `uv.lock`.
+
+After installing the locked environment:
+
+```bash
+uv sync --locked
+```
+
+verify that the MuJoCo Python bindings are available:
+
+```bash
+uv run python -c "import mujoco; print(mujoco.__version__)"
+```
+
+A successful command prints the installed MuJoCo version.
+
+### Franka Panda MuJoCo Model
+
+The Franka Emika Panda physics model used by RobustLearn-Manip is stored in the
+repository under:
+
+```text
+robot_description/mjcf/franka_emika_panda/
+```
+
+The primary robot MJCF is:
+
+```text
+robot_description/mjcf/franka_emika_panda/panda.xml
+```
+
+The accompanying `assets/` directory contains the collision and visual meshes
+referenced by the MJCF.
+
+The model is vendored into the repository so that simulation does not depend
+on an external MuJoCo Menagerie checkout or on machine-specific absolute file
+paths.
+
+The reusable Python loader is implemented under:
+
+```text
+robustlearn/sim/
+```
+
+and can be exercised with:
+
+```bash
+uv run python - <<'PY'
+from robustlearn.sim import load_panda_model, panda_model_path
+
+model = load_panda_model()
+
+print("Model path:", panda_model_path())
+print("nq:", model.nq)
+print("nv:", model.nv)
+print("njnt:", model.njnt)
+print("nu:", model.nu)
+PY
+```
+
+For the currently vendored Panda model, the complete robot model contains the
+seven Panda arm joints together with the two gripper finger joints.
+
+The seven arm joints are identified by the stable names:
+
+```text
+joint1
+joint2
+joint3
+joint4
+joint5
+joint6
+joint7
+```
+
+The gripper additionally contains:
+
+```text
+finger_joint1
+finger_joint2
+```
+
+The distinction is important: the Panda arm is a seven-joint manipulator, but
+the complete MJCF contains additional gripper joints.
+
+The model also contains actuators for the seven arm joints and a coupled
+gripper actuator.
+
+### MJCF and ROS Robot Representations
+
+RobustLearn-Manip intentionally maintains separate robot representations for
+different responsibilities.
+
+```text
+URDF / Xacro
+    |
+    +---- ROS 2 / MoveIt / ros2_control representation
+
+MJCF
+    |
+    +---- MuJoCo physics / manipulation-task representation
+```
+
+The MuJoCo MJCF must therefore not be treated as merely another visualization
+description.
+
+It is the physics-side robot representation used by the manipulation
+environment.
+
+The ROS 2 URDF/Xacro representation remains responsible for the ROS software
+stack, including MoveIt and `ros2_control`.
+
+The project does not assume that the URDF/Xacro and MJCF models are
+numerically identical. Explicit cross-model numerical validation is handled
+separately from the initial MuJoCo foundation.
+
+### Model Provenance and Licensing
+
+The Panda MJCF is derived from the Franka Emika Panda model provided by the
+MuJoCo Menagerie project.
+
+The exact vendored upstream revision is recorded in:
+
+```text
+robot_description/mjcf/franka_emika_panda/UPSTREAM.md
+```
+
+The upstream license is preserved in:
+
+```text
+robot_description/mjcf/franka_emika_panda/LICENSE
+```
+
+Additional upstream documentation retained with the model includes:
+
+```text
+robot_description/mjcf/franka_emika_panda/README.md
+robot_description/mjcf/franka_emika_panda/CHANGELOG.md
+```
+
+These files must remain with the vendored model so that its source,
+attribution, and licensing remain traceable.
+
+### MuJoCo Sites
+
+The upstream Panda robot MJCF currently contains no MuJoCo `site` objects.
+
+This is intentional for the RobustLearn-Manip architecture.
+
+Task-specific sites should not be added by modifying the vendored Panda robot
+model directly. They belong to the insertion workcell and task description.
+
+Later task models will define stable names for locations such as:
+
+```text
+peg tip
+receptacle center
+insertion axis
+pre-insertion target
+```
+
+Keeping task geometry separate from the vendored robot model preserves a
+clean boundary between:
+
+```text
+robot physics model
+        |
+        v
+task / workcell model
+        |
+        v
+learning environment
+```
+
+### MuJoCo Foundation Validation
+
+The Panda model foundation can be checked directly with:
+
+```bash
+uv run pytest tests/unit/test_panda_model.py -v
+```
+
+The tests verify that:
+
+- the committed Panda MJCF path exists;
+- the model compiles through the MuJoCo Python API;
+- all seven expected Panda arm joints are present;
+- joint limits are finite and ordered;
+- expected Panda bodies are resolvable by name;
+- expected arm actuators are present;
+- the model can be stepped for multiple physics steps;
+- simulation state remains finite during the smoke rollout.
+
+The standard project-wide Python validation remains:
 
 ```bash
 uv run ruff check .
 uv run mypy robustlearn
 uv run pytest
 ```
-
-All checks should pass.
-
-These commands correspond to the validation performed by the Python GitHub
-Actions workflow:
-
-```text
-uv sync --locked
-        |
-        v
-      Ruff
-        |
-        v
-      mypy
-        |
-        v
-     pytest
-```
-
-## 4. ROS Environment and pytest Plugin Interaction
-
-ROS 2 modifies the shell environment when its setup script is sourced.
-
-For example:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-ROS can expose system Python packages through environment variables such as
-`PYTHONPATH`.
-
-pytest supports automatic discovery of third-party plugins. In an environment
-where ROS and additional system Python packages are visible, pytest may
-therefore discover plugins that are unrelated to RobustLearn-Manip.
-
-The normal project validation command is:
-
-```bash
-uv run pytest
-```
-
-If a ROS-configured local shell causes pytest failures from unrelated
-automatically discovered plugins, run:
-
-```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest
-```
-
-This disables automatic third-party pytest plugin loading while still running
-the project's own tests.
-
-This command should not be used to hide failures in RobustLearn-Manip tests.
-It is intended only for failures caused by external pytest plugin discovery.
-
-For the cleanest Python-only validation environment, run the Python checks in
-a terminal where ROS 2 has not been sourced.
-
-## 5. ROS 2 Environment
-
-Open a terminal and source ROS 2 Jazzy:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-Confirm the ROS distribution:
-
-```bash
-echo "$ROS_DISTRO"
-```
-
-Expected result:
-
-```text
-jazzy
-```
-
-Move into the ROS workspace:
-
-```bash
-cd ros2_ws
-```
-
-## 6. Install ROS Dependencies
-
-Update the rosdep dependency database:
-
-```bash
-rosdep update
-```
-
-Install dependencies required by packages in the workspace:
-
-```bash
-rosdep install \
-  --from-paths src \
-  --ignore-src \
-  --rosdistro jazzy \
-  -r -y
-```
-
-The `--ignore-src` option prevents rosdep from attempting to install packages
-that already exist as source packages inside the workspace.
-
-## 7. Build the ROS Workspace
-
-From `ros2_ws/`, ensure ROS 2 Jazzy is sourced:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-Build:
-
-```bash
-colcon build --symlink-install
-```
-
-A successful build creates generated workspace directories:
-
-```text
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
-```
-
-These directories are local build products and are intentionally excluded
-from version control.
-
-## 8. Source the Workspace Overlay
-
-After the build completes:
-
-```bash
-source install/setup.bash
-```
-
-There are now two ROS environments involved:
-
-```text
-/opt/ros/jazzy
-      |
-      | ROS 2 underlay
-      v
-ros2_ws/install
-      |
-      | project overlay
-      v
-RobustLearn ROS packages
-```
-
-The system ROS 2 Jazzy installation is the **underlay**.
-
-The project's generated `install/` directory is the **overlay**.
-
-Sourcing:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-makes the standard ROS 2 Jazzy environment available.
-
-After building the project, sourcing:
-
-```bash
-source install/setup.bash
-```
-
-adds the RobustLearn-Manip packages to the ROS environment.
-
-This distinction is important for ROS commands, launch files, custom
-interfaces, and integration tests that locate packages through the ROS package
-index.
-
-## 9. Verify Project ROS Packages
-
-After sourcing the workspace overlay:
-
-```bash
-ros2 pkg prefix robustlearn_interfaces
-ros2 pkg prefix robustlearn_control
-```
-
-Both commands should return installation paths associated with the current
-workspace.
-
-The returned paths should contain:
-
-```text
-ros2_ws/install/
-```
-
-Verify the custom service definition:
-
-```bash
-ros2 interface show robustlearn_interfaces/srv/SetSystemMode
-```
-
-Expected interface:
-
-```text
-string mode
----
-bool success
-string message
-```
-
-Verify the custom action definition:
-
-```bash
-ros2 interface show robustlearn_interfaces/action/ExecuteSystemCheck
-```
-
-Expected structure:
-
-```text
-int32 total_steps
----
-bool success
-string message
----
-int32 completed_steps
-float32 progress
-```
-
-Successful interface discovery confirms that the generated
-`robustlearn_interfaces` package is available through the workspace overlay.
-
-## 10. Run ROS Tests
-
-From `ros2_ws/`, with the ROS underlay and project overlay sourced:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-colcon test
-colcon test-result --verbose
-```
-
-The expected result is:
-
-```text
-0 errors
-0 failures
-```
-
-The exact total number of tests may increase as the project grows.
-Reproducibility should therefore be judged by the absence of errors and
-failures rather than by a permanently fixed test count.
-
-The ROS test suite includes ROS package checks together with project-written
-unit and integration tests.
-
-## 11. Why the Workspace Must Be Sourced Before Integration Tests
-
-Building a ROS package and making that package discoverable by ROS are
-separate steps.
-
-For example:
-
-```bash
-colcon build --symlink-install
-```
-
-creates the workspace installation.
-
-However, a shell that has only sourced:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-knows about the ROS 2 Jazzy installation but does not automatically know about
-the project's newly built packages.
-
-A launch-based integration test may therefore fail with an error similar to:
-
-```text
-package 'robustlearn_control' not found, searching: ['/opt/ros/jazzy']
-```
-
-Source the generated workspace overlay:
-
-```bash
-source install/setup.bash
-```
-
-After doing this, ROS package discovery includes packages built inside
-RobustLearn-Manip.
-
-The ROS 2 GitHub Actions workflow performs the same overlay-sourcing step
-before running the test suite.
-
-## 12. Local Validation Equivalent to CI
-
-The repository contains separate Python and ROS 2 GitHub Actions workflows.
-
-The following commands reproduce the essential CI validation locally.
-
-### Python CI Equivalent
-
-From the repository root:
-
-```bash
-uv sync --locked
-
-uv run ruff check .
-uv run mypy robustlearn
-uv run pytest
-```
-
-Expected result:
-
-```text
-Ruff    PASS
-mypy    PASS
-pytest  PASS
-```
-
-If pytest is affected by unrelated automatically discovered plugins in a
-ROS-configured shell:
-
-```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest
-```
-
-### ROS 2 CI Equivalent
-
-From the repository root:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-
-rosdep update
-
-rosdep install \
-  --from-paths ros2_ws/src \
-  --ignore-src \
-  --rosdistro jazzy \
-  -r -y
-```
-
-Move into the workspace:
-
-```bash
-cd ros2_ws
-```
-
-Build:
-
-```bash
-colcon build --symlink-install
-```
-
-Source the workspace:
-
-```bash
-source install/setup.bash
-```
-
-Run the tests:
-
-```bash
-colcon test
-colcon test-result --verbose
-```
-
-A successful validation should therefore look conceptually like:
-
-```text
-Python
-  |
-  +-- uv sync       PASS
-  +-- Ruff          PASS
-  +-- mypy          PASS
-  +-- pytest        PASS
-
-ROS 2
-  |
-  +-- rosdep        PASS
-  +-- colcon build  PASS
-  +-- colcon test   PASS
-  +-- test-result   0 errors, 0 failures
-```
-
-GitHub Actions independently repeats these validation stages on a clean
-runner.
-
-## 13. Generated Files Must Remain Untracked
-
-The following files and directories are generated locally and must not be
-committed:
-
-```text
-.venv/
-__pycache__/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
-```
-
-These paths are excluded through the repository `.gitignore`.
-
-After building and testing, verify the repository state:
-
-```bash
-git status
-```
-
-Generated Python and ROS build products should not appear as untracked or
-modified repository files.
-
-Only intentional source-code or documentation changes should appear in Git.
-
-## 14. Full Clean-Checkout Verification
-
-For the strongest reproducibility test, create an entirely separate clone
-instead of deleting generated files from the normal development repository.
-
-For example:
-
-```bash
-cd ~/projects
-
-git clone https://github.com/million-9/robustlearn-manip.git \
-  robustlearn-manip-clean
-
-cd robustlearn-manip-clean
-```
-
-This separate checkout must not reuse:
-
-```text
-.venv/
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
-```
-
-from the normal development repository.
-
-### Reproduce the Python Environment
-
-Create the environment:
-
-```bash
-uv venv \
-  --python /usr/bin/python3 \
-  --system-site-packages \
-  .venv
-```
-
-Activate it:
-
-```bash
-source .venv/bin/activate
-```
-
-Prevent colcon from discovering it:
-
-```bash
-touch .venv/COLCON_IGNORE
-```
-
-Install dependencies:
-
-```bash
-uv sync --locked
-```
-
-Run Python validation:
-
-```bash
-uv run ruff check .
-uv run mypy robustlearn
-uv run pytest
-```
-
-If the local ROS/system Python environment causes unrelated pytest plugin
-discovery problems:
-
-```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest
-```
-
-### Reproduce the ROS Workspace
-
-Source ROS 2:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-```
-
-Update rosdep:
-
-```bash
-rosdep update
-```
-
-Install dependencies:
-
-```bash
-rosdep install \
-  --from-paths ros2_ws/src \
-  --ignore-src \
-  --rosdistro jazzy \
-  -r -y
-```
-
-Move into the workspace:
-
-```bash
-cd ros2_ws
-```
-
-Build:
-
-```bash
-colcon build --symlink-install
-```
-
-Source the generated overlay:
-
-```bash
-source install/setup.bash
-```
-
-Run tests:
-
-```bash
-colcon test
-colcon test-result --verbose
-```
-
-Verify package discovery:
-
-```bash
-ros2 pkg prefix robustlearn_interfaces
-ros2 pkg prefix robustlearn_control
-```
-
-Verify the custom service:
-
-```bash
-ros2 interface show robustlearn_interfaces/srv/SetSystemMode
-```
-
-Verify the custom action:
-
-```bash
-ros2 interface show robustlearn_interfaces/action/ExecuteSystemCheck
-```
-
-If all Python checks, ROS builds, ROS tests, and package-discovery commands
-succeed from this independent clone, the current project environment is
-considered reproducible.
-
-## 15. Clean-Checkout Reproducibility Checklist
-
-A clean-checkout verification is complete when:
-
-- the repository was cloned into a separate directory
-- no original `.venv/` was reused
-- no original ROS `build/` directory was reused
-- no original ROS `install/` directory was reused
-- no original ROS `log/` directory was reused
-- dependencies were installed from committed project metadata
-- `uv sync --locked` succeeded
-- Ruff passed
-- mypy passed
-- pytest passed
-- ROS 2 Jazzy was sourced
-- rosdep dependency installation succeeded
-- the ROS workspace built successfully
-- the generated workspace overlay was sourced
-- `robustlearn_interfaces` was discoverable
-- `robustlearn_control` was discoverable
-- custom ROS interfaces were discoverable
-- `colcon test` completed successfully
-- `colcon test-result --verbose` reported zero errors and zero failures
-- generated development and build artifacts remained untracked
-- the essential local validation stages correspond to GitHub Actions CI
-
-## Reproducibility Principle
-
-A project result is not considered reproducible merely because it works in
-the original development checkout.
-
-The project should be reconstructable from:
-
-```text
-Git repository
-      +
-locked dependencies
-      +
-documented system assumptions
-      +
-documented setup commands
-      +
-documented build commands
-      +
-automated tests
-      +
-continuous integration
-```
-
-without relying on hidden local state.
-
-The clean-checkout process will be extended as MuJoCo, robot control,
-planning, learning infrastructure, datasets, trained models, experiment
-configuration, evaluation tooling, and deployment components are added to the
-project.
-
-## Panda Joint Trajectory Validation
-
-The mock Panda trajectory-control path can be validated without MuJoCo or
-physical hardware.
-
-The expected data path is:
-
-```text
-FollowJointTrajectory goal
-        |
-        v
-panda_arm_controller
-        |
-        v
-ros2_control position command interfaces
-        |
-        v
-mock_components/GenericSystem
-        |
-        v
-position and velocity state interfaces
-        |
-        v
-joint_state_broadcaster
-        |
-        v
-/joint_states
-```
-
-### Start the mock Panda
-
-From the ROS workspace:
-
-```bash
-cd ros2_ws
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-ros2 launch robustlearn_description mock_panda.launch.py
-```
-
-Leave this terminal running.
-
-### Verify the trajectory action
-
-In a second terminal:
-
-```bash
-cd ros2_ws
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-ros2 action type /panda_arm_controller/follow_joint_trajectory
-ros2 action info /panda_arm_controller/follow_joint_trajectory
-```
-
-The expected action type is:
-
-```text
-control_msgs/action/FollowJointTrajectory
-```
-
-The controller should expose one action server.
-
-### Monitor the Panda joint state
-
-In another terminal:
-
-```bash
-cd ros2_ws
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-ros2 topic echo /joint_states --field position
-```
-
-### Send a valid seven-joint trajectory
-
-Send a trajectory goal using all seven Panda arm joints:
-
-```bash
-ros2 action send_goal \
-  /panda_arm_controller/follow_joint_trajectory \
-  control_msgs/action/FollowJointTrajectory \
-  "{
-    trajectory: {
-      joint_names: [
-        panda_joint1,
-        panda_joint2,
-        panda_joint3,
-        panda_joint4,
-        panda_joint5,
-        panda_joint6,
-        panda_joint7
-      ],
-      points: [
-        {
-          positions: [0.2, -0.3, 0.1, -1.0, 0.2, 1.0, 0.3],
-          time_from_start: {sec: 5, nanosec: 0}
-        }
-      ]
-    }
-  }" \
-  --feedback
-```
-
-The goal should be accepted and finish successfully.
-
-Expected final action status:
-
-```text
-error_code: 0
-error_string: Goal successfully reached!
-
-Goal finished with status: SUCCEEDED
-```
-
-After execution, inspect one joint-state message:
-
-```bash
-ros2 topic echo /joint_states --once
-```
-
-The final joint positions should correspond to the commanded target:
-
-```text
-[0.2, -0.3, 0.1, -1.0, 0.2, 1.0, 0.3]
-```
-
-### Validate trajectory rejection
-
-A malformed trajectory should be rejected instead of being passed to the
-hardware.
-
-The following goal intentionally contains seven joint names but only six
-position values:
-
-```bash
-ros2 action send_goal \
-  /panda_arm_controller/follow_joint_trajectory \
-  control_msgs/action/FollowJointTrajectory \
-  "{
-    trajectory: {
-      joint_names: [
-        panda_joint1,
-        panda_joint2,
-        panda_joint3,
-        panda_joint4,
-        panda_joint5,
-        panda_joint6,
-        panda_joint7
-      ],
-      points: [
-        {
-          positions: [0.1, -0.2, 0.1, -0.8, 0.2, 0.8],
-          time_from_start: {sec: 3, nanosec: 0}
-        }
-      ]
-    }
-  }" \
-  --feedback
-```
-
-Expected result:
-
-```text
-Goal was rejected.
-```
-
-Verify that the rejected goal did not modify the robot state:
-
-```bash
-ros2 topic echo /joint_states --once
-```
-
-The Panda should remain at its previously commanded configuration.
-
-This validates both successful trajectory execution and understandable
-rejection of structurally invalid trajectory commands.
-
-## Week 3 Panda Control Acceptance Workflow
-
-Week 3 integrates the Panda robot description, `ros2_control`, trajectory
-control, MoveIt 2, and RViz into one validated manipulation-control stack.
-
-The acceptance path is:
-
-```text
-MoveIt / RViz
-      |
-      v
-   move_group
-      |
-      v
-panda_arm_controller
-      |
-      v
-FollowJointTrajectory
-      |
-      v
-  ros2_control
-      |
-      v
-mock_components/GenericSystem
-      |
-      v
-state interfaces
-      |
-      v
-joint_state_broadcaster
-      |
-      v
- /joint_states
-```
-
-The Week 3 acceptance gate is a monitored trajectory command sent to the
-mock Panda, followed by verification that the commanded state is reflected
-through `/joint_states`.
-
-### Build and source the workspace
-
-From the repository root:
-
-```bash
-cd ros2_ws
-
-source /opt/ros/jazzy/setup.bash
-
-colcon build --symlink-install
-
-source install/setup.bash
-```
-
-### Interactive MoveIt and RViz validation
-
-Launch the full Panda planning environment:
-
-```bash
-ros2 launch robustlearn_moveit_config moveit_demo.launch.py
-```
-
-The launch starts:
-
-```text
-robot_state_publisher
-controller_manager
-joint_state_broadcaster
-panda_arm_controller
-move_group
-RViz
-```
-
-Verify the controllers in a second terminal:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source ~/projects/robustlearn-manip/ros2_ws/install/setup.bash
-
-ros2 control list_controllers
-```
-
-Both of the following controllers should report `active`:
-
-```text
-joint_state_broadcaster
-panda_arm_controller
-```
-
-Verify that the Panda trajectory action is available:
-
-```bash
-ros2 action info \
-  /panda_arm_controller/follow_joint_trajectory
-```
-
-The action type is:
-
-```text
-control_msgs/action/FollowJointTrajectory
-```
-
-Verify the robot-state stream:
-
-```bash
-ros2 topic echo /joint_states --once
-```
-
-The message should contain all seven Panda arm joints:
-
-```text
-panda_joint1
-panda_joint2
-panda_joint3
-panda_joint4
-panda_joint5
-panda_joint6
-panda_joint7
-```
-
-In RViz, use the MotionPlanning panel with the planning group:
-
-```text
-panda_arm
-```
-
-Select a valid goal state and click `Plan`.
-
-A successful validation displays the start state, goal state, and generated
-collision-free trajectory in RViz.
-
-### Headless Week 3 stack
-
-The same stack can be launched without RViz:
-
-```bash
-ros2 launch robustlearn_moveit_config \
-  moveit_demo.launch.py \
-  use_rviz:=false
-```
-
-This mode is intended for automated testing and CI.
-
-It retains the Panda description, TF, `ros2_control`, controllers, and
-`move_group`, but does not start the graphical RViz process.
-
-### Automated acceptance test
-
-The Week 3 acceptance workflow is exercised automatically by:
-
-```text
-robustlearn_moveit_config/test/test_week3_acceptance_launch.py
-```
-
-Run it with:
-
-```bash
-cd ros2_ws
-
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-
-colcon test \
-  --packages-select robustlearn_moveit_config \
-  --event-handlers console_direct+
-
-colcon test-result \
-  --test-result-base build/robustlearn_moveit_config \
-  --verbose
-```
-
-The launch test verifies that:
-
-- `joint_state_broadcaster` becomes active
-- `panda_arm_controller` becomes active
-- `/joint_states` contains all seven Panda arm joints
-- the `FollowJointTrajectory` server becomes available
-- a seven-joint trajectory goal is accepted
-- trajectory execution completes successfully
-- final joint positions agree with the commanded target within the configured
-  tolerance
-
-The automated target is:
-
-```text
-panda_joint1   0.15
-panda_joint2  -0.65
-panda_joint3   0.10
-panda_joint4  -2.10
-panda_joint5   0.10
-panda_joint6   1.70
-panda_joint7   0.65
-```
-
-The acceptance-test joint-position tolerance is:
-
-```text
-0.02 rad
-```
-
-### Week 3 acceptance result
-
-Week 3 is considered complete when all of the following are true:
-
-```text
-Panda robot description loads             PASS
-controller_manager starts                 PASS
-joint_state_broadcaster active            PASS
-panda_arm_controller active               PASS
-seven-joint /joint_states available       PASS
-FollowJointTrajectory action available    PASS
-monitored trajectory accepted             PASS
-trajectory execution succeeds             PASS
-final state matches commanded target      PASS
-MoveIt panda_arm planning works           PASS
-trajectory visible in RViz                PASS
-automated acceptance test passes          PASS
-ROS 2 CI                                  PASS
-```
-
-MuJoCo dynamics, contact physics, deterministic simulation resets, the custom
-MuJoCo `ros2_control` hardware interface, Gymnasium environments, and learned
-policies remain intentionally deferred to later milestones.
