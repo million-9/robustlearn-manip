@@ -6,6 +6,7 @@ from gymnasium import spaces
 from gymnasium.utils.env_checker import check_env
 
 from robustlearn.envs import PandaInsertionEnv
+from robustlearn.sim.task import InsertionTaskStatus
 
 
 def valid_action(env: PandaInsertionEnv) -> np.ndarray:
@@ -252,3 +253,129 @@ def test_invalid_episode_length_is_rejected() -> None:
         PandaInsertionEnv(
             max_episode_steps=0,
         )
+
+
+def test_reset_info_contains_task_diagnostics() -> None:
+    env = PandaInsertionEnv()
+
+    _, info = env.reset(seed=2026)
+
+    assert info["task_success"] is False
+    assert info["task_failure"] is False
+
+    assert info["task_lateral_error"] == pytest.approx(
+        0.000000522,
+        abs=1.0e-9,
+    )
+    assert info["task_axial_offset"] == pytest.approx(
+        0.019502429,
+        abs=1.0e-9,
+    )
+    assert info["task_insertion_depth"] == pytest.approx(
+        -0.019502429,
+        abs=1.0e-9,
+    )
+
+    env.close()
+
+
+def test_canonical_state_does_not_terminate_episode() -> None:
+    env = PandaInsertionEnv()
+
+    env.reset(seed=2026)
+
+    _, _, terminated, truncated, info = env.step(
+        valid_action(env)
+    )
+
+    assert terminated is False
+    assert truncated is False
+    assert info["task_success"] is False
+    assert info["task_failure"] is False
+
+    env.close()
+
+
+def test_successful_task_status_terminates_episode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = PandaInsertionEnv()
+    env.reset(seed=2026)
+
+    success_status = InsertionTaskStatus(
+        lateral_error=0.0005,
+        axial_offset=-0.012,
+        insertion_depth=0.012,
+        success=True,
+        failure=False,
+    )
+
+    monkeypatch.setattr(
+        env.simulation,
+        "task_status",
+        lambda: success_status,
+    )
+
+    _, reward, terminated, truncated, info = env.step(
+        valid_action(env)
+    )
+
+    assert reward == 0.0
+    assert terminated is True
+    assert truncated is False
+    assert info["task_success"] is True
+    assert info["task_failure"] is False
+
+    env.close()
+
+
+def test_failure_task_status_terminates_episode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = PandaInsertionEnv()
+    env.reset(seed=2026)
+
+    failure_status = InsertionTaskStatus(
+        lateral_error=0.003,
+        axial_offset=-0.001,
+        insertion_depth=0.001,
+        success=False,
+        failure=True,
+    )
+
+    monkeypatch.setattr(
+        env.simulation,
+        "task_status",
+        lambda: failure_status,
+    )
+
+    _, reward, terminated, truncated, info = env.step(
+        valid_action(env)
+    )
+
+    assert reward == 0.0
+    assert terminated is True
+    assert truncated is False
+    assert info["task_success"] is False
+    assert info["task_failure"] is True
+
+    env.close()
+
+
+def test_time_limit_truncation_is_not_task_failure() -> None:
+    env = PandaInsertionEnv(
+        max_episode_steps=1,
+    )
+
+    env.reset(seed=2026)
+
+    _, _, terminated, truncated, info = env.step(
+        valid_action(env)
+    )
+
+    assert terminated is False
+    assert truncated is True
+    assert info["task_success"] is False
+    assert info["task_failure"] is False
+
+    env.close()

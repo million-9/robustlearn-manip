@@ -97,9 +97,16 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
 
     def _info(self) -> dict[str, Any]:
         """Return diagnostic information for the current episode."""
+        task_status = self.simulation.task_status()
+
         return {
             "simulation_time": float(self.simulation.data.time),
             "elapsed_steps": self._elapsed_steps,
+            "task_lateral_error": task_status.lateral_error,
+            "task_axial_offset": task_status.axial_offset,
+            "task_insertion_depth": task_status.insertion_depth,
+            "task_success": task_status.success,
+            "task_failure": task_status.failure,
         }
 
     def reset(
@@ -156,10 +163,14 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
 
         observation = self._observation()
 
-        # Week 4 intentionally does not define the final insertion reward or
-        # task-success conditions.
+        # Reward shaping remains intentionally separate from the geometric
+        # Week 5 task evaluation.
         reward = 0.0
-        terminated = False
+
+        task_status = self.simulation.task_status()
+        terminated = task_status.terminated
+
+        # The episode step limit is truncation, not task failure.
         truncated = self._elapsed_steps >= self.max_episode_steps
 
         return (

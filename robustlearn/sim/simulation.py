@@ -11,6 +11,10 @@ from robustlearn.sim.sensing import (
     PandaSensorReader,
     PandaSensorSnapshot,
 )
+from robustlearn.sim.task import (
+    InsertionTaskStatus,
+    evaluate_insertion_task,
+)
 
 FloatArray = NDArray[np.float64]
 
@@ -137,6 +141,27 @@ class MuJoCoSimulation:
     def sensor_snapshot(self) -> PandaSensorSnapshot:
         """Return an independent snapshot of Panda sensor outputs."""
         return self._sensor_reader.snapshot(self.data)
+
+    def task_status(self) -> InsertionTaskStatus:
+        """Evaluate the current Panda insertion task geometry."""
+        peg_tip_id = self._site_id("peg_tip")
+        receptacle_center_id = self._site_id("receptacle_center")
+        insertion_axis_id = self._site_id("insertion_axis")
+
+        return evaluate_insertion_task(
+            np.asarray(
+                self.data.site_xpos[peg_tip_id],
+                dtype=np.float64,
+            ),
+            np.asarray(
+                self.data.site_xpos[receptacle_center_id],
+                dtype=np.float64,
+            ),
+            np.asarray(
+                self.data.site_xpos[insertion_axis_id],
+                dtype=np.float64,
+            ),
+        )
 
     def snapshot(self) -> SimulationSnapshot:
         """Return an independent copy of the determinism-relevant state."""
