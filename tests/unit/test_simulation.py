@@ -184,3 +184,23 @@ def test_snapshot_is_independent_of_live_simulation_state() -> None:
         snapshot.qpos,
         saved_qpos,
     )
+
+
+def test_task_status_uses_live_task_site_geometry() -> None:
+    sim = MuJoCoSimulation()
+    sim.reset(seed=2026)
+
+    status = sim.task_status()
+
+    assert status.success is False
+    assert status.failure is False
+    assert status.terminated is False
+
+    assert status.lateral_error == pytest.approx(
+        0.000000522,
+        abs=1.0e-9,
+    )
+    assert status.insertion_depth == pytest.approx(
+        -0.019502429,
+        abs=1.0e-9,
+    )
