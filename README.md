@@ -32,12 +32,13 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 4: deterministic MuJoCo manipulation environment foundation.**
+**Week 5: sensing, task evaluation, visualization, and deterministic scripted insertion.**
 
-The project has progressed through the initial repository, ROS 2 communication,
-robot-description, and MuJoCo simulation foundations.
+The project now has a deterministic Panda insertion environment with the
+sensing and task infrastructure required for the first complete manipulation
+demonstration.
 
-Completed so far:
+Completed through Week 5:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -49,39 +50,71 @@ Completed so far:
 - Python CI running in GitHub Actions
 - ROS 2 CI running in GitHub Actions
 - clean-checkout reproducibility workflow established
-- project-specific ROS 2 interfaces created
-- ROS 2 topic publisher/subscriber communication implemented
-- ROS 2 services implemented
-- ROS 2 actions implemented
-- parameter configuration and validation added
-- YAML runtime configuration added
-- ROS 2 launch workflow added
-- Franka Panda URDF/Xacro and MoveIt-side robot-description work established
-- Franka Panda MuJoCo model vendored from MuJoCo Menagerie
-- MuJoCo model provenance and licensing recorded
-- Panda MuJoCo model loader implemented
-- insertion workcell and task geometry implemented
-- fixed insertion tool and receptacle geometry implemented
-- stable task sites added for insertion reasoning
-- deterministic MuJoCo reset layer implemented
-- project-owned NumPy RNG and seeded reset semantics implemented
-- controlled simulator-state snapshots implemented
-- Gymnasium Panda insertion environment implemented
-- explicit action and observation spaces implemented
-- deterministic Gymnasium reset behavior verified
-- deterministic fixed rollouts verified across independent environments
-- headless MuJoCo execution verified
-- Week 4 end-to-end deterministic acceptance test implemented
+- project-specific ROS 2 topics, services, actions, parameters, and launch workflows implemented
+- Franka Panda URDF/Xacro and MoveIt-side robot-description foundation established
+- Franka Panda MuJoCo model vendored with provenance and licensing recorded
+- insertion workcell, fixed tool, receptacle, and stable task geometry implemented
+- deterministic MuJoCo reset and simulator-state snapshot layer implemented
+- seeded Gymnasium Panda insertion environment implemented
+- deterministic fixed rollouts verified
+- seven Panda arm joint-position sensors implemented
+- seven Panda arm joint-velocity sensors implemented
+- three-axis wrist force sensing implemented
+- three-axis wrist torque sensing implemented
+- controlled wrist-wrench response verified
+- stable RGB/depth workcell camera implemented
+- RGB output verified at `(240, 320, 3)` with `uint8`
+- depth output verified at `(240, 320)` with `float32`
+- insertion success and failure evaluation implemented
+- insertion depth and lateral-error diagnostics implemented
+- optional MuJoCo task-debug visualization implemented
+- deterministic Jacobian-based scripted Panda insertion controller implemented
+- scripted insertion reaches the clean task success condition
+- same-seed scripted execution verified reproducible
+- Week 5 integrated acceptance workflow implemented
 
 The current milestone gate is:
 
 ```text
-Seeded environment reproduces state exactly.
+Sensor values are sanity-tested and a scripted sequence can complete the task.
 ```
 
-This is verified by creating two independent Panda insertion environments,
-resetting both with the same seed, applying the same action sequence, and
-comparing their controlled simulator state exactly.
+The canonical Week 5 scripted run starts from:
+
+```text
+reset(seed=2026)
+```
+
+and reaches task success through the project insertion evaluator rather than a
+hardcoded script-completion flag.
+
+The integrated acceptance test is:
+
+```text
+tests/integration/test_week5_acceptance.py
+```
+
+Run it with:
+
+```bash
+uv run pytest tests/integration/test_week5_acceptance.py -q
+```
+
+On a machine with a working MuJoCo rendering backend, the expected result is:
+
+```text
+5 passed
+```
+
+Detailed Week 5 reproduction instructions are available in:
+
+```text
+docs/week5_acceptance.md
+```
+
+The next milestone, Week 6, will begin the domain-randomization and formal task
+configuration work. The final learned-policy state/action API and clean
+100-episode evaluation workflow also remain intentionally deferred to Week 6.
 
 ## Development Environment
 
