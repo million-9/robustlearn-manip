@@ -10,9 +10,15 @@ from robustlearn.sim.panda import (
     load_panda_model,
     panda_model_path,
 )
+from robustlearn.sim.simulation import (
+    MuJoCoSimulation,
+    SimulationSnapshot,
+)
 
 __all__ = [
     "PANDA_ARM_JOINT_NAMES",
+    "MuJoCoSimulation",
+    "SimulationSnapshot",
     "fixed_peg_model_path",
     "load_insertion_model",
     "load_panda_model",
