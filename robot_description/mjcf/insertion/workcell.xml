@@ -13,6 +13,27 @@
 
   <worldbody>
   <frame name="workcell_root">
+    <!--
+      Fixed front/oblique camera for logging, debugging, and later
+      perception extensions.
+
+      MuJoCo cameras look along their local -Z axis. The xyaxes values
+      orient this camera toward the insertion workspace while keeping
+      local +Y approximately aligned with world up.
+
+      The resolution attribute records the project camera contract;
+      the Python renderer uses the same dimensions explicitly.
+    -->
+    <camera
+      name="workcell_oblique"
+      mode="fixed"
+      pos="1.05 -0.75 0.95"
+      xyaxes="0.834354 0.551230 0 -0.265897 0.402468 0.875967"
+      fovy="45"
+      resolution="320 240"
+      output="rgb depth"
+    />
+
     <geom
       name="ground"
       type="plane"
