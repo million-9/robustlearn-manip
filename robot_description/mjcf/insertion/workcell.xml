@@ -1,0 +1,175 @@
+<mujoco model="robustlearn insertion workcell">
+  <asset>
+    <material
+      name="workstation_material"
+      rgba="0.45 0.45 0.48 1"
+    />
+
+    <material
+      name="fixture_material"
+      rgba="0.20 0.25 0.30 1"
+    />
+  </asset>
+
+  <worldbody>
+  <frame name="workcell_root">
+    <geom
+      name="ground"
+      type="plane"
+      size="2 2 0.05"
+      rgba="0.15 0.15 0.15 1"
+    />
+
+    <body
+      name="workstation"
+      pos="0.55 0 0.35"
+    >
+      <geom
+        name="workstation_visual"
+        type="box"
+        size="0.45 0.40 0.025"
+        material="workstation_material"
+        contype="0"
+        conaffinity="0"
+        group="2"
+      />
+
+      <geom
+        name="workstation_collision"
+        type="box"
+        size="0.45 0.40 0.025"
+        group="3"
+      />
+    </body>
+
+    <body
+      name="insertion_fixture"
+      pos="0.5545 0 0.405"
+    >
+      <!--
+        The receptacle is intentionally constructed from primitive boxes.
+
+        Fixture outer half-width: 0.100 m
+        Opening half-width:       0.0095 m
+        Opening width:            0.019 m
+
+        This produces a real empty collision opening rather than placing
+        a decorative cylinder on top of a solid collision block.
+      -->
+
+      <!-- Left wall -->
+
+      <geom
+        name="fixture_left_visual"
+        type="box"
+        pos="-0.05475 0 0"
+        size="0.04525 0.10 0.03"
+        material="fixture_material"
+        contype="0"
+        conaffinity="0"
+        group="2"
+      />
+
+      <geom
+        name="fixture_left_collision"
+        type="box"
+        pos="-0.05475 0 0"
+        size="0.04525 0.10 0.03"
+        group="3"
+      />
+
+      <!-- Right wall -->
+
+      <geom
+        name="fixture_right_visual"
+        type="box"
+        pos="0.05475 0 0"
+        size="0.04525 0.10 0.03"
+        material="fixture_material"
+        contype="0"
+        conaffinity="0"
+        group="2"
+      />
+
+      <geom
+        name="fixture_right_collision"
+        type="box"
+        pos="0.05475 0 0"
+        size="0.04525 0.10 0.03"
+        group="3"
+      />
+
+      <!-- Front wall -->
+
+      <geom
+        name="fixture_front_visual"
+        type="box"
+        pos="0 -0.05475 0"
+        size="0.0095 0.04525 0.03"
+        material="fixture_material"
+        contype="0"
+        conaffinity="0"
+        group="2"
+      />
+
+      <geom
+        name="fixture_front_collision"
+        type="box"
+        pos="0 -0.05475 0"
+        size="0.0095 0.04525 0.03"
+        group="3"
+      />
+
+      <!-- Rear wall -->
+
+      <geom
+        name="fixture_rear_visual"
+        type="box"
+        pos="0 0.05475 0"
+        size="0.0095 0.04525 0.03"
+        material="fixture_material"
+        contype="0"
+        conaffinity="0"
+        group="2"
+      />
+
+      <geom
+        name="fixture_rear_collision"
+        type="box"
+        pos="0 0.05475 0"
+        size="0.0095 0.04525 0.03"
+        group="3"
+      />
+
+      <body
+        name="receptacle"
+        pos="0 0 0.03"
+      >
+        <site
+          name="receptacle_center"
+          pos="0 0 0"
+          type="sphere"
+          size="0.004"
+          rgba="0 1 0 0.7"
+        />
+
+        <site
+          name="insertion_axis"
+          pos="0 0 0.05"
+          type="cylinder"
+          size="0.002 0.05"
+          rgba="0 0 1 0.45"
+        />
+
+        <site
+          name="pre_insertion"
+          pos="0 0 0.0195"
+          type="sphere"
+          size="0.005"
+          rgba="1 1 0 0.7"
+        />
+      </body>
+    </body>
+    </frame>
+  </worldbody>
+</mujoco>
