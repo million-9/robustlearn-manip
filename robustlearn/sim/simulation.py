@@ -7,6 +7,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from robustlearn.sim.insertion import load_insertion_model
+from robustlearn.sim.sensing import (
+    PandaSensorReader,
+    PandaSensorSnapshot,
+)
 
 FloatArray = NDArray[np.float64]
 
@@ -41,6 +45,7 @@ class MuJoCoSimulation:
         """Create a simulation around the RobustLearn insertion model."""
         self.model = model if model is not None else load_insertion_model()
         self.data = mujoco.MjData(self.model)
+        self._sensor_reader = PandaSensorReader(self.model)
 
         self.rng: np.random.Generator = np.random.default_rng()
         self.last_seed: int | None = None
@@ -129,6 +134,9 @@ class MuJoCoSimulation:
                 self.model,
                 self.data,
             )
+    def sensor_snapshot(self) -> PandaSensorSnapshot:
+        """Return an independent snapshot of Panda sensor outputs."""
+        return self._sensor_reader.snapshot(self.data)
 
     def snapshot(self) -> SimulationSnapshot:
         """Return an independent copy of the determinism-relevant state."""
