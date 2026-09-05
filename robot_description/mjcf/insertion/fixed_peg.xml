@@ -1,0 +1,55 @@
+<mujoco model="robustlearn fixed insertion peg">
+  <worldbody>
+    <frame name="tool_mount">
+      <body
+        name="peg_tool"
+        pos="0 0 0.085"
+      >
+        <!--
+          Fixed tool strategy for the initial insertion task.
+
+          A short adapter visually connects the Panda hand to the insertion
+          peg. The peg itself remains deliberately simple for contact.
+        -->
+
+        <geom
+          name="tool_adapter_visual"
+          type="cylinder"
+          pos="0 0 0.0125"
+          size="0.018 0.0125"
+          rgba="0.25 0.25 0.28 1"
+          contype="0"
+          conaffinity="0"
+          group="2"
+        />
+
+        <geom
+          name="peg_visual"
+          type="box"
+          pos="0 0 0.055"
+          size="0.008 0.008 0.03"
+          rgba="0.85 0.65 0.15 1"
+          contype="0"
+          conaffinity="0"
+          group="2"
+        />
+
+        <geom
+          name="peg_collision"
+          type="box"
+          pos="0 0 0.055"
+          size="0.008 0.008 0.03"
+          group="3"
+        />
+
+        <site
+          name="peg_tip"
+          pos="0 0 0.085"
+          type="sphere"
+          size="0.004"
+          rgba="1 0 0 0.8"
+        />
+      </body>
+    </frame>
+  </worldbody>
+</mujoco>
