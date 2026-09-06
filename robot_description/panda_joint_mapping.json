@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "joint_count": 7,
+  "position_transform": "ros_position = position_sign * mujoco_position + position_offset_rad",
+  "limit_comparison": {
+    "policy": "equal",
+    "absolute_tolerance_rad": 1e-9
+  },
+  "home_reference": {
+    "mujoco_keyframe": "home",
+    "positions_rad_by_ros_joint": {
+      "panda_joint1": 0.0,
+      "panda_joint2": 0.0,
+      "panda_joint3": 0.0,
+      "panda_joint4": -1.57079,
+      "panda_joint5": 0.0,
+      "panda_joint6": 1.57079,
+      "panda_joint7": -0.7853
+    }
+  },
+  "cross_model_fk": {
+    "ros_base_frame": "panda_link0",
+    "mujoco_base_body": "link0",
+    "ros_tip_frame": "panda_link7",
+    "mujoco_tip_body": "link7",
+    "include_all_mapped_joints": true
+  },
+  "joints": [
+    {
+      "ros_joint": "panda_joint1",
+      "mujoco_joint": "joint1",
+      "mujoco_actuator": "actuator1",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint2",
+      "mujoco_joint": "joint2",
+      "mujoco_actuator": "actuator2",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint3",
+      "mujoco_joint": "joint3",
+      "mujoco_actuator": "actuator3",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint4",
+      "mujoco_joint": "joint4",
+      "mujoco_actuator": "actuator4",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint5",
+      "mujoco_joint": "joint5",
+      "mujoco_actuator": "actuator5",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint6",
+      "mujoco_joint": "joint6",
+      "mujoco_actuator": "actuator6",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    },
+    {
+      "ros_joint": "panda_joint7",
+      "mujoco_joint": "joint7",
+      "mujoco_actuator": "actuator7",
+      "position_sign": 1.0,
+      "position_offset_rad": 0.0
+    }
+  ]
+}
