@@ -17,6 +17,16 @@ jobs:
         with:
           required-ros-distributions: jazzy
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install MuJoCo dependency
+        shell: bash
+        run: |
+          uv sync --locked --no-dev
+          MUJOCO_ROOT="$(uv run --no-sync python -c 'import mujoco, pathlib; print(pathlib.Path(mujoco.__file__).resolve().parent)')"
+          echo "ROBUSTLEARN_MUJOCO_ROOT=$MUJOCO_ROOT" >> "$GITHUB_ENV"
+
       - name: Initialize rosdep
         shell: bash
         run: |
