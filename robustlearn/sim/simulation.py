@@ -6,8 +6,16 @@ import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
-from robustlearn.config import PandaInsertionTaskConfig
+from robustlearn.config import (
+    PandaInsertionRandomizationConfig,
+    PandaInsertionTaskConfig,
+)
 from robustlearn.sim.insertion import load_insertion_model
+from robustlearn.sim.randomization import (
+    PandaInsertionRandomizationSample,
+    PandaInsertionRandomizer,
+    sample_panda_insertion_randomization,
+)
 from robustlearn.sim.sensing import (
     PandaSensorReader,
     PandaSensorSnapshot,
@@ -51,9 +59,13 @@ class MuJoCoSimulation:
         self.model = model if model is not None else load_insertion_model()
         self.data = mujoco.MjData(self.model)
         self._sensor_reader = PandaSensorReader(self.model)
+        self._randomizer = PandaInsertionRandomizer(self.model)
 
         self.rng: np.random.Generator = np.random.default_rng()
         self.last_seed: int | None = None
+        self.last_randomization_sample: (
+            PandaInsertionRandomizationSample | None
+        ) = None
 
         self._home_keyframe_id = int(
             mujoco.mj_name2id(
@@ -101,11 +113,25 @@ class MuJoCoSimulation:
         self,
         *,
         seed: int | None = None,
+        randomization: PandaInsertionRandomizationConfig | None = None,
     ) -> SimulationSnapshot:
-        """Reset all controlled simulator state to the canonical start state."""
+        """Reset simulator state and apply configured episode randomization."""
         if seed is not None:
             self.rng = np.random.default_rng(seed)
             self.last_seed = seed
+
+        randomization_config = (
+            PandaInsertionRandomizationConfig()
+            if randomization is None
+            else randomization
+        )
+
+        sample = sample_panda_insertion_randomization(
+            self.rng,
+            randomization_config,
+        )
+        self._randomizer.apply(sample)
+        self.last_randomization_sample = sample
 
         mujoco.mj_resetDataKeyframe(
             self.model,

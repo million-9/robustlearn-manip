@@ -112,6 +112,7 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
     def _info(self) -> dict[str, Any]:
         """Return diagnostic information for the current episode."""
         task_status = self.simulation.task_status(config=self.config)
+        randomization_sample = self.simulation.last_randomization_sample
 
         return {
             "simulation_time": float(self.simulation.data.time),
@@ -121,6 +122,11 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
             "task_insertion_depth": task_status.insertion_depth,
             "task_success": task_status.success,
             "task_failure": task_status.failure,
+            "randomization_sample": (
+                None
+                if randomization_sample is None
+                else randomization_sample.to_dict()
+            ),
         }
 
     def reset(
@@ -140,6 +146,7 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
 
         self.simulation.reset(
             seed=seed,
+            randomization=self.config.randomization,
         )
 
         observation = self._observation()

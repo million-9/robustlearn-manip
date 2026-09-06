@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from robustlearn.config import FloatRange, PandaInsertionRandomizationConfig
 from robustlearn.sim.simulation import MuJoCoSimulation, SimulationSnapshot
 
 
@@ -204,3 +205,96 @@ def test_task_status_uses_live_task_site_geometry() -> None:
         -0.019502429,
         abs=1.0e-9,
     )
+
+
+
+def nonzero_randomization_config() -> PandaInsertionRandomizationConfig:
+    """Return a bounded non-zero fixture randomization configuration."""
+    return PandaInsertionRandomizationConfig(
+        enabled=True,
+        receptacle_x_offset_m=FloatRange(-0.002, 0.002),
+        receptacle_y_offset_m=FloatRange(-0.003, 0.003),
+        receptacle_yaw_offset_rad=FloatRange(-0.05, 0.05),
+    )
+
+
+def test_randomized_reset_same_seed_reproduces_episode() -> None:
+    config = nonzero_randomization_config()
+
+    sim_a = MuJoCoSimulation()
+    sim_b = MuJoCoSimulation()
+
+    snapshot_a = sim_a.reset(
+        seed=2026,
+        randomization=config,
+    )
+    snapshot_b = sim_b.reset(
+        seed=2026,
+        randomization=config,
+    )
+
+    assert sim_a.last_randomization_sample == sim_b.last_randomization_sample
+    assert_snapshots_equal(snapshot_a, snapshot_b)
+
+
+def test_randomized_reset_different_seeds_vary_episode() -> None:
+    config = nonzero_randomization_config()
+    sim = MuJoCoSimulation()
+
+    first = sim.reset(
+        seed=1,
+        randomization=config,
+    )
+    first_sample = sim.last_randomization_sample
+
+    second = sim.reset(
+        seed=2,
+        randomization=config,
+    )
+    second_sample = sim.last_randomization_sample
+
+    assert first_sample != second_sample
+    assert not np.array_equal(
+        first.task_site_xpos,
+        second.task_site_xpos,
+    )
+
+
+def test_clean_reset_restores_canonical_state_after_randomization() -> None:
+    sim = MuJoCoSimulation()
+
+    canonical = sim.reset(seed=2026)
+
+    sim.reset(
+        seed=99,
+        randomization=nonzero_randomization_config(),
+    )
+
+    restored = sim.reset(seed=2026)
+
+    assert_snapshots_equal(canonical, restored)
+
+    assert sim.last_randomization_sample is not None
+    assert sim.last_randomization_sample.to_dict() == {
+        "receptacle_x_offset_m": 0.0,
+        "receptacle_y_offset_m": 0.0,
+        "receptacle_yaw_offset_rad": 0.0,
+    }
+
+
+def test_randomized_reset_keeps_simulator_state_finite() -> None:
+    sim = MuJoCoSimulation()
+
+    snapshot = sim.reset(
+        seed=2026,
+        randomization=nonzero_randomization_config(),
+    )
+
+    assert np.isfinite(snapshot.time)
+    assert np.all(np.isfinite(snapshot.qpos))
+    assert np.all(np.isfinite(snapshot.qvel))
+    assert np.all(np.isfinite(snapshot.act))
+    assert np.all(np.isfinite(snapshot.ctrl))
+    assert np.all(np.isfinite(snapshot.qfrc_applied))
+    assert np.all(np.isfinite(snapshot.xfrc_applied))
+    assert np.all(np.isfinite(snapshot.task_site_xpos))

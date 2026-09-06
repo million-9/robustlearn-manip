@@ -5,7 +5,11 @@ import pytest
 from gymnasium import spaces
 from gymnasium.utils.env_checker import check_env
 
-from robustlearn.config import PandaInsertionTaskConfig
+from robustlearn.config import (
+    FloatRange,
+    PandaInsertionRandomizationConfig,
+    PandaInsertionTaskConfig,
+)
 from robustlearn.envs import PandaInsertionEnv
 from robustlearn.sim.task import InsertionTaskStatus
 
@@ -413,3 +417,54 @@ def test_environment_rejects_config_with_legacy_overrides() -> None:
             config=config,
             frame_skip=3,
         )
+
+
+
+def test_environment_applies_configured_randomization() -> None:
+    randomization = PandaInsertionRandomizationConfig(
+        enabled=True,
+        receptacle_x_offset_m=FloatRange(0.001, 0.001),
+        receptacle_y_offset_m=FloatRange(-0.002, -0.002),
+        receptacle_yaw_offset_rad=FloatRange(0.03, 0.03),
+    )
+    config = PandaInsertionTaskConfig(
+        randomization=randomization,
+    )
+    env = PandaInsertionEnv(config=config)
+
+    _, info = env.reset(seed=2026)
+
+    assert info["randomization_sample"] == {
+        "receptacle_x_offset_m": 0.001,
+        "receptacle_y_offset_m": -0.002,
+        "receptacle_yaw_offset_rad": 0.03,
+    }
+
+    env.close()
+
+
+def test_environment_same_seed_reproduces_randomized_reset() -> None:
+    randomization = PandaInsertionRandomizationConfig(
+        enabled=True,
+        receptacle_x_offset_m=FloatRange(-0.002, 0.002),
+        receptacle_y_offset_m=FloatRange(-0.003, 0.003),
+        receptacle_yaw_offset_rad=FloatRange(-0.05, 0.05),
+    )
+    config = PandaInsertionTaskConfig(
+        randomization=randomization,
+    )
+
+    env_a = PandaInsertionEnv(config=config)
+    env_b = PandaInsertionEnv(config=config)
+
+    observation_a, info_a = env_a.reset(seed=42)
+    observation_b, info_b = env_b.reset(seed=42)
+
+    np.testing.assert_array_equal(
+        observation_a,
+        observation_b,
+    )
+    assert info_a["randomization_sample"] == info_b["randomization_sample"]
+
+    env_a.close()
+    env_b.close()
