@@ -56,6 +56,46 @@ public:
         velocities[index];
     }
   }
+
+  static std::array<double, 7> panda_actuator_controls(
+    const MuJoCoSystem & system)
+  {
+    std::array<double, 7> controls{};
+
+    for (std::size_t index = 0; index < controls.size(); ++index) {
+      controls[index] =
+        system.data_->ctrl[system.actuator_ids_[index]];
+    }
+
+    return controls;
+  }
+
+  static double actuator_control(
+    const MuJoCoSystem & system,
+    const char * actuator_name)
+  {
+    const int actuator_id = mj_name2id(
+      system.model_.get(),
+      mjOBJ_ACTUATOR,
+      actuator_name);
+
+    if (actuator_id < 0) {
+      throw std::runtime_error(
+              std::string("Missing MuJoCo actuator: ") + actuator_name);
+    }
+
+    return system.data_->ctrl[actuator_id];
+  }
+
+  static double simulation_time(const MuJoCoSystem & system)
+  {
+    return system.data_->time;
+  }
+
+  static double physics_timestep(const MuJoCoSystem & system)
+  {
+    return system.model_->opt.timestep;
+  }
 };
 
 }  // namespace robustlearn_mujoco_hardware
@@ -671,6 +711,686 @@ TEST(MuJoCoSystemReadTest, non_finite_mujoco_state_is_rejected_transactionally)
           valid_velocities[index]);
       }
     }
+  }
+}
+
+TEST(MuJoCoSystemWriteTest, valid_ros_commands_reach_named_panda_actuators)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> expected_commands = {
+    0.20,
+    -0.30,
+    0.40,
+    -1.20,
+    0.50,
+    1.30,
+    -0.60,
+  };
+
+  const double gripper_control_before =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::actuator_control(
+    *system_ptr,
+    "actuator8");
+
+  for (std::size_t index = 0; index < expected_commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        expected_commands[index],
+        true));
+  }
+
+  EXPECT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.002)),
+    hardware_interface::return_type::OK);
+
+  const auto actual_controls =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    panda_actuator_controls(*system_ptr);
+
+  for (std::size_t index = 0; index < expected_commands.size(); ++index) {
+    EXPECT_DOUBLE_EQ(
+      actual_controls[index],
+      expected_commands[index]);
+  }
+
+  const double gripper_control_after =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::actuator_control(
+    *system_ptr,
+    "actuator8");
+
+  EXPECT_DOUBLE_EQ(
+    gripper_control_after,
+    gripper_control_before);
+}
+
+TEST(MuJoCoSystemWriteTest, non_finite_command_is_rejected_transactionally)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> baseline_commands = {
+    0.10,
+    -0.20,
+    0.30,
+    -1.00,
+    0.40,
+    1.20,
+    -0.50,
+  };
+
+  for (std::size_t index = 0; index < baseline_commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        baseline_commands[index],
+        true));
+  }
+
+  ASSERT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.002)),
+    hardware_interface::return_type::OK);
+
+  const auto controls_before =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    panda_actuator_controls(*system_ptr);
+
+  std::array<double, 7> invalid_commands = {
+    -0.60,
+    0.70,
+    -0.80,
+    -1.40,
+    0.90,
+    1.50,
+    -1.00,
+  };
+
+  invalid_commands[4] =
+    std::numeric_limits<double>::quiet_NaN();
+
+  for (std::size_t index = 0; index < invalid_commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        invalid_commands[index],
+        true));
+  }
+
+  EXPECT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.002)),
+    hardware_interface::return_type::ERROR);
+
+  const auto controls_after =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    panda_actuator_controls(*system_ptr);
+
+  for (std::size_t index = 0; index < controls_before.size(); ++index) {
+    EXPECT_DOUBLE_EQ(
+      controls_after[index],
+      controls_before[index]);
+  }
+}
+
+TEST(MuJoCoSystemWriteTest, out_of_range_command_is_rejected_transactionally)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> baseline_commands = {
+    0.10,
+    -0.20,
+    0.30,
+    -1.00,
+    0.40,
+    1.20,
+    -0.50,
+  };
+
+  for (std::size_t index = 0; index < baseline_commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        baseline_commands[index],
+        true));
+  }
+
+  ASSERT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.002)),
+    hardware_interface::return_type::OK);
+
+  const auto controls_before =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    panda_actuator_controls(*system_ptr);
+
+  std::array<double, 7> invalid_commands = {
+    -0.60,
+    0.70,
+    -0.80,
+    -1.40,
+    0.90,
+    1.50,
+    -1.00,
+  };
+
+  // Panda joint 4 has a compiled MuJoCo control range of
+  // [-3.0718, -0.0698], so zero is finite but invalid.
+  invalid_commands[3] = 0.0;
+
+  for (std::size_t index = 0; index < invalid_commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        invalid_commands[index],
+        true));
+  }
+
+  EXPECT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.002)),
+    hardware_interface::return_type::ERROR);
+
+  const auto controls_after =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    panda_actuator_controls(*system_ptr);
+
+  for (std::size_t index = 0; index < controls_before.size(); ++index) {
+    EXPECT_DOUBLE_EQ(
+      controls_after[index],
+      controls_before[index]);
+  }
+}
+
+TEST(MuJoCoSystemWriteTest, successful_write_advances_one_step_and_read_stays_finite)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> commands = {
+    0.10,
+    -0.20,
+    0.30,
+    -1.20,
+    0.40,
+    1.20,
+    -0.50,
+  };
+
+  for (std::size_t index = 0; index < commands.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto command_it =
+      std::find_if(
+      command_interfaces.begin(),
+      command_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+      });
+
+    ASSERT_NE(command_it, command_interfaces.end());
+
+    ASSERT_TRUE(
+      (*command_it)->set_value(
+        commands[index],
+        true));
+  }
+
+  const double timestep =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    physics_timestep(*system_ptr);
+
+  const double time_before =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    simulation_time(*system_ptr);
+
+  ASSERT_GT(timestep, 0.0);
+  EXPECT_DOUBLE_EQ(timestep, 0.002);
+
+  ASSERT_EQ(
+    system_ptr->write(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(timestep)),
+    hardware_interface::return_type::OK);
+
+  const double time_after =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    simulation_time(*system_ptr);
+
+  EXPECT_NEAR(
+    time_after,
+    time_before + timestep,
+    1e-12);
+
+  ASSERT_EQ(
+    system_ptr->read(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(timestep)),
+    hardware_interface::return_type::OK);
+
+  for (const auto & state_interface : state_interfaces) {
+    ASSERT_NE(state_interface, nullptr);
+
+    const auto value =
+      state_interface->get_optional<double>();
+
+    ASSERT_TRUE(value.has_value());
+    EXPECT_TRUE(std::isfinite(*value));
+  }
+}
+
+TEST(MuJoCoSystemWriteTest, fixed_command_sequence_is_deterministic)
+{
+  auto first_system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * first_system_ptr = first_system.get();
+
+  hardware_interface::HardwareComponent first_component(
+    std::move(first_system));
+
+  first_component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto first_state_interfaces =
+    first_component.export_state_interfaces();
+
+  auto first_command_interfaces =
+    first_component.export_command_interfaces();
+
+  ASSERT_EQ(first_state_interfaces.size(), 14u);
+  ASSERT_EQ(first_command_interfaces.size(), 7u);
+
+  first_component.configure();
+  first_component.activate();
+
+  ASSERT_EQ(
+    first_component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  auto second_system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * second_system_ptr = second_system.get();
+
+  hardware_interface::HardwareComponent second_component(
+    std::move(second_system));
+
+  second_component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto second_state_interfaces =
+    second_component.export_state_interfaces();
+
+  auto second_command_interfaces =
+    second_component.export_command_interfaces();
+
+  ASSERT_EQ(second_state_interfaces.size(), 14u);
+  ASSERT_EQ(second_command_interfaces.size(), 7u);
+
+  second_component.configure();
+  second_component.activate();
+
+  ASSERT_EQ(
+    second_component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<std::array<double, 7>, 3> command_sequence = {{
+    {
+      0.05,
+      -0.10,
+      0.15,
+      -1.40,
+      0.20,
+      1.40,
+      -0.25,
+    },
+    {
+      0.10,
+      -0.20,
+      0.25,
+      -1.20,
+      0.30,
+      1.30,
+      -0.40,
+    },
+    {
+      0.15,
+      -0.30,
+      0.35,
+      -1.00,
+      0.40,
+      1.20,
+      -0.55,
+    },
+  }};
+
+  const double timestep =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    physics_timestep(*first_system_ptr);
+
+  ASSERT_DOUBLE_EQ(
+    timestep,
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    physics_timestep(*second_system_ptr));
+
+  for (const auto & commands : command_sequence) {
+    for (std::size_t index = 0; index < commands.size(); ++index) {
+      const std::string joint_name =
+        "panda_joint" + std::to_string(index + 1);
+
+      const auto first_command_it =
+        std::find_if(
+        first_command_interfaces.begin(),
+        first_command_interfaces.end(),
+        [&joint_name](const auto & interface)
+        {
+          return
+            interface->get_prefix_name() == joint_name &&
+            interface->get_interface_name() ==
+            hardware_interface::HW_IF_POSITION;
+        });
+
+      const auto second_command_it =
+        std::find_if(
+        second_command_interfaces.begin(),
+        second_command_interfaces.end(),
+        [&joint_name](const auto & interface)
+        {
+          return
+            interface->get_prefix_name() == joint_name &&
+            interface->get_interface_name() ==
+            hardware_interface::HW_IF_POSITION;
+        });
+
+      ASSERT_NE(
+        first_command_it,
+        first_command_interfaces.end());
+
+      ASSERT_NE(
+        second_command_it,
+        second_command_interfaces.end());
+
+      ASSERT_TRUE(
+        (*first_command_it)->set_value(
+          commands[index],
+          true));
+
+      ASSERT_TRUE(
+        (*second_command_it)->set_value(
+          commands[index],
+          true));
+    }
+
+    ASSERT_EQ(
+      first_system_ptr->write(
+        rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+        rclcpp::Duration::from_seconds(timestep)),
+      hardware_interface::return_type::OK);
+
+    ASSERT_EQ(
+      second_system_ptr->write(
+        rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+        rclcpp::Duration::from_seconds(timestep)),
+      hardware_interface::return_type::OK);
+  }
+
+  const double first_time =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    simulation_time(*first_system_ptr);
+
+  const double second_time =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    simulation_time(*second_system_ptr);
+
+  EXPECT_NEAR(
+    first_time,
+    static_cast<double>(command_sequence.size()) * timestep,
+    1e-12);
+
+  EXPECT_NEAR(
+    second_time,
+    first_time,
+    1e-12);
+
+  ASSERT_EQ(
+    first_system_ptr->read(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(timestep)),
+    hardware_interface::return_type::OK);
+
+  ASSERT_EQ(
+    second_system_ptr->read(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(timestep)),
+    hardware_interface::return_type::OK);
+
+  std::unordered_map<std::string, double> first_states;
+
+  for (const auto & state_interface : first_state_interfaces) {
+    ASSERT_NE(state_interface, nullptr);
+
+    const auto value =
+      state_interface->get_optional<double>();
+
+    ASSERT_TRUE(value.has_value());
+    ASSERT_TRUE(std::isfinite(*value));
+
+    first_states[state_interface->get_name()] = *value;
+  }
+
+  ASSERT_EQ(first_states.size(), 14u);
+
+  for (const auto & state_interface : second_state_interfaces) {
+    ASSERT_NE(state_interface, nullptr);
+
+    const auto value =
+      state_interface->get_optional<double>();
+
+    ASSERT_TRUE(value.has_value());
+    ASSERT_TRUE(std::isfinite(*value));
+
+    const auto first_state_it =
+      first_states.find(state_interface->get_name());
+
+    ASSERT_NE(
+      first_state_it,
+      first_states.end());
+
+    EXPECT_NEAR(
+      *value,
+      first_state_it->second,
+      1e-12);
   }
 }
 
