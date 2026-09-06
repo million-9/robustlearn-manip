@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<library path="robustlearn_mujoco_hardware">
+  <class
+    name="robustlearn_mujoco_hardware/MuJoCoSystem"
+    type="robustlearn_mujoco_hardware::MuJoCoSystem"
+    base_class_type="hardware_interface::SystemInterface">
+    <description>
+      RobustLearn-Manip MuJoCo ros2_control system hardware interface.
+    </description>
+  </class>
+</library>
