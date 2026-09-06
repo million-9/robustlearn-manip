@@ -259,3 +259,151 @@ It verifies that:
 
 The test uses ROS service clients and a typed sensor_msgs/msg/JointState
 subscription rather than parsing command-line output.
+
+## Week 8 direct joint-trajectory execution
+
+Issue #69 adds a dedicated trajectory-command bringup on top of the Week 7
+MuJoCo hardware path.
+
+The Week 7 joint-state-only launch remains unchanged:
+
+    mujoco_panda.launch.py
+
+The Week 8 trajectory launch is:
+
+    mujoco_panda_trajectory.launch.py
+
+and uses:
+
+    config/mujoco_trajectory_controllers.yaml
+
+The Week 8 launch activates both:
+
+    joint_state_broadcaster
+    panda_arm_controller
+
+The arm controller is:
+
+    joint_trajectory_controller/JointTrajectoryController
+
+and commands exactly:
+
+    panda_joint1
+    panda_joint2
+    panda_joint3
+    panda_joint4
+    panda_joint5
+    panda_joint6
+    panda_joint7
+
+using position command interfaces and position/velocity state interfaces.
+
+The gripper/task actuator remains outside this seven-arm-joint trajectory
+command path.
+
+### Launch the trajectory-command path
+
+From the repository root, after building and sourcing the ROS workspace:
+
+    MODEL_PATH="$(
+      realpath robot_description/mjcf/insertion/panda_insertion.xml
+    )"
+
+    ros2 launch \
+      robustlearn_description \
+      mujoco_panda_trajectory.launch.py \
+      model_path:="$MODEL_PATH"
+
+Verify the controllers:
+
+    ros2 control list_controllers
+
+Expected active controllers include:
+
+    joint_state_broadcaster ... active
+    panda_arm_controller ... active
+
+Verify the hardware interfaces:
+
+    ros2 control list_hardware_interfaces
+
+The position command interfaces from `panda_joint1/position` through
+`panda_joint7/position` must all report both available and claimed.
+
+### Send a bounded FollowJointTrajectory goal
+
+The canonical insertion model starts close to:
+
+    [0.0, 0.012, 0.0, -1.582, 0.0, 1.569, -0.785]
+
+A small bounded direct trajectory can therefore move `panda_joint1` to
+0.03 rad while keeping the other arm joints near their initial positions:
+
+    ros2 action send_goal \
+      /panda_arm_controller/follow_joint_trajectory \
+      control_msgs/action/FollowJointTrajectory \
+      "{
+        trajectory: {
+          joint_names: [
+            panda_joint1,
+            panda_joint2,
+            panda_joint3,
+            panda_joint4,
+            panda_joint5,
+            panda_joint6,
+            panda_joint7
+          ],
+          points: [
+            {
+              positions: [
+                0.03,
+                0.012,
+                0.0,
+                -1.582,
+                0.0,
+                1.569,
+                -0.785
+              ],
+              time_from_start: {sec: 2, nanosec: 0}
+            }
+          ]
+        }
+      }"
+
+The goal must be accepted and finish with:
+
+    error_code: 0
+    Goal finished with status: SUCCEEDED
+
+### Trajectory tolerances
+
+The Week 8 controller configuration defines:
+
+    path tolerance:            0.05 rad
+    final joint tolerance:     0.01 rad
+    stopped velocity tolerance: 0.01 rad/s
+    goal-time allowance:       0.5 s
+
+The final position error for every Panda arm joint must therefore be no greater
+than 0.01 rad.
+
+### Automated acceptance
+
+The launch-level trajectory acceptance test is:
+
+    ros2_ws/src/robustlearn_description/test/test_mujoco_trajectory_launch.py
+
+It verifies that:
+
+- `joint_state_broadcaster` becomes active;
+- `panda_arm_controller` becomes active;
+- all seven Panda position command interfaces are available and claimed;
+- Panda position and velocity feedback is finite;
+- a bounded `FollowJointTrajectory` goal is accepted;
+- the action reaches `GoalStatus.STATUS_SUCCEEDED`;
+- MuJoCo-backed Panda joint state changes in response to the command;
+- the final error for every Panda arm joint is at most 0.01 rad.
+
+The Week 7 joint-state-only acceptance test remains:
+
+    ros2_ws/src/robustlearn_description/test/test_mujoco_panda_launch.py
