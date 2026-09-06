@@ -32,13 +32,13 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 5: sensing, task evaluation, visualization, and deterministic scripted insertion.**
+**Week 6: deterministic task configuration, domain randomization, policy API, and seeded evaluation.**
 
-The project now has a deterministic Panda insertion environment with the
-sensing and task infrastructure required for the first complete manipulation
-demonstration.
+RobustLearn-Manip now has the reproducible configuration and evaluation
+foundation required for later imitation-learning and reinforcement-learning
+work.
 
-Completed through Week 5:
+Completed through Week 6:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -57,64 +57,86 @@ Completed through Week 5:
 - deterministic MuJoCo reset and simulator-state snapshot layer implemented
 - seeded Gymnasium Panda insertion environment implemented
 - deterministic fixed rollouts verified
-- seven Panda arm joint-position sensors implemented
-- seven Panda arm joint-velocity sensors implemented
-- three-axis wrist force sensing implemented
-- three-axis wrist torque sensing implemented
-- controlled wrist-wrench response verified
-- stable RGB/depth workcell camera implemented
-- RGB output verified at `(240, 320, 3)` with `uint8`
-- depth output verified at `(240, 320)` with `float32`
+- Panda joint-position and joint-velocity sensing implemented
+- six-axis wrist force/torque sensing implemented
+- RGB/depth debug camera implemented
 - insertion success and failure evaluation implemented
-- insertion depth and lateral-error diagnostics implemented
-- optional MuJoCo task-debug visualization implemented
 - deterministic Jacobian-based scripted Panda insertion controller implemented
 - scripted insertion reaches the clean task success condition
-- same-seed scripted execution verified reproducible
-- Week 5 integrated acceptance workflow implemented
+- explicit `PandaInsertionTaskConfig` schema implemented
+- explicit randomization configuration and finite bounded ranges implemented
+- deterministic receptacle X/Y/yaw randomization implemented
+- randomization disabled by default so clean Week 5 behavior is preserved
+- stable 38D state-based learned-policy observation API implemented
+- stable 4D Cartesian policy action API implemented
+- policy API kept separate from low-level MuJoCo actuator controls
+- headless seeded multi-episode evaluation runner implemented
+- structured per-episode and aggregate evaluation records implemented
+- clean and randomized evaluation paths verified reproducible
+- Week 6 integrated acceptance workflow implemented
 
-The current milestone gate is:
+The Week 6 milestone gate is:
 
 ```text
-Sensor values are sanity-tested and a scripted sequence can complete the task.
+100 seeded episodes execute automatically.
 ```
 
-The canonical Week 5 scripted run starts from:
+The validated full clean run used:
 
 ```text
-reset(seed=2026)
+base seed: 2026
+episode count: 100
+seed range: 2026..2125
 ```
 
-and reaches task success through the project insertion evaluator rather than a
-hardcoded script-completion flag.
-
-The integrated acceptance test is:
+and produced:
 
 ```text
-tests/integration/test_week5_acceptance.py
+episodes: 100
+successes: 100
+failures: 0
+truncated: 0
+success rate: 1.000
+all recorded scalar results finite: yes
+```
+
+The complete 100-episode result set was then regenerated using the same
+configuration and ordered seed set.
+
+The result records were exactly identical.
+
+The lightweight integrated acceptance test is:
+
+```text
+tests/integration/test_week6_acceptance.py
 ```
 
 Run it with:
 
 ```bash
-uv run pytest tests/integration/test_week5_acceptance.py -q
+uv run pytest tests/integration/test_week6_acceptance.py -q
 ```
 
-On a machine with a working MuJoCo rendering backend, the expected result is:
+Expected result:
 
 ```text
-5 passed
+3 passed
 ```
 
-Detailed Week 5 reproduction instructions are available in:
+Detailed Week 6 configuration, randomization, policy, evaluation, and milestone
+documentation is available in:
 
 ```text
-docs/week5_acceptance.md
+docs/week6_configuration.md
+docs/week6_randomization.md
+docs/week6_policy_api.md
+docs/week6_evaluation.md
+docs/week6_acceptance.md
 ```
 
-The next milestone, Week 6, will begin the domain-randomization and formal task
-configuration work. The final learned-policy state/action API and clean
-100-episode evaluation workflow also remain intentionally deferred to Week 6.
+Work beyond Week 6 intentionally includes classical insertion benchmarking,
+demonstration collection, Behaviour Cloning, DAgger, SAC, larger robustness
+experiments, and deployment-oriented integration.
 
 ## Development Environment
 
