@@ -304,6 +304,22 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  const int home_keyframe_id = mj_name2id(
+    compiled_model.get(),
+    mjOBJ_KEY,
+    "home");
+
+  if (home_keyframe_id >= 0) {
+    mj_resetDataKeyframe(
+      compiled_model.get(),
+      data.get(),
+      home_keyframe_id);
+
+    mj_forward(
+      compiled_model.get(),
+      data.get());
+  }
+
   std::array<int, 7> qpos_addresses{};
   std::array<int, 7> dof_addresses{};
   std::array<int, 7> actuator_ids{};
@@ -582,6 +598,84 @@ hardware_interface::return_type MuJoCoSystem::write(
   const rclcpp::Time & /* time */,
   const rclcpp::Duration & /* period */)
 {
+  const auto logger = get_logger();
+
+  if (!model_ || !data_) {
+    RCLCPP_ERROR(
+      logger,
+      "Cannot write MuJoCo hardware commands before model initialization");
+
+    return hardware_interface::return_type::ERROR;
+  }
+
+  std::array<double, 7> commands{};
+
+  try {
+    for (std::size_t index = 0; index < kRosPandaJointNames.size(); ++index) {
+      const std::string command_interface =
+        std::string(kRosPandaJointNames[index]) +
+        "/" +
+        hardware_interface::HW_IF_POSITION;
+
+      const double command =
+        get_command<double>(command_interface);
+
+      if (!std::isfinite(command)) {
+        RCLCPP_ERROR(
+          logger,
+          "ROS 2 control command for joint '%s' is non-finite",
+          kRosPandaJointNames[index]);
+
+        return hardware_interface::return_type::ERROR;
+      }
+
+      const int actuator_id = actuator_ids_[index];
+
+      if (model_->actuator_ctrllimited[actuator_id]) {
+        const double lower_limit =
+          model_->actuator_ctrlrange[2 * actuator_id];
+
+        const double upper_limit =
+          model_->actuator_ctrlrange[2 * actuator_id + 1];
+
+        if (command < lower_limit || command > upper_limit) {
+          RCLCPP_ERROR(
+            logger,
+            "Command %.17g for joint '%s' is outside MuJoCo actuator "
+            "control range [%.17g, %.17g]",
+            command,
+            kRosPandaJointNames[index],
+            lower_limit,
+            upper_limit);
+
+          return hardware_interface::return_type::ERROR;
+        }
+      }
+
+      commands[index] = command;
+    }
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR(
+      logger,
+      "Failed to read ROS 2 control position commands: %s",
+      error.what());
+
+    return hardware_interface::return_type::ERROR;
+  }
+
+  for (std::size_t index = 0; index < kRosPandaJointNames.size(); ++index) {
+    data_->ctrl[actuator_ids_[index]] = commands[index];
+  }
+
+  joint_commands_ = commands;
+
+  // A successful ros2_control write advances exactly one compiled MuJoCo
+  // physics timestep. The ROS control period intentionally does not scale
+  // the number of physics steps, keeping fixed command sequences deterministic.
+  mj_step(
+    model_.get(),
+    data_.get());
+
   return hardware_interface::return_type::OK;
 }
 

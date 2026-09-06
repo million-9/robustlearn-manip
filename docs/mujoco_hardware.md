@@ -16,9 +16,13 @@ Its base class is:
 Issue #59 provides the package scaffold, shared library, pluginlib
 registration, and plugin discovery/loading test.
 
-MuJoCo model initialization, Panda joint and actuator mappings, lifecycle
-resource ownership, state reads, command writes, and physics stepping are
-implemented by later Week 7 issues.
+Week 7 progressively implements the runtime hardware path:
+
+- Issue #60 initializes the MuJoCo model, lifecycle state, and named Panda
+  joint/actuator mappings.
+- Issue #61 implements the MuJoCo-to-ros2_control Panda joint-state read path.
+- Issue #62 implements the ros2_control-to-MuJoCo Panda position-command path
+  and deterministic physics stepping.
 
 ## MuJoCo C/C++ build dependency
 
@@ -78,3 +82,41 @@ The runtime contract is:
 
 Issue #59 defines this contract. Actual model loading and validation are part
 of Issue #60.
+
+## Panda command and physics-stepping contract
+
+The hardware plugin exposes one position command interface for each Panda arm
+joint from `panda_joint1` through `panda_joint7`.
+
+During initialization, the plugin uses the MJCF `home` keyframe when one is
+available and advances MuJoCo derived state with `mj_forward()`. The internal
+position command buffers are initialized from the resulting Panda joint
+positions so activation begins from a hold-current-position command instead of
+introducing an initial command jump.
+
+Each `write()` cycle follows this contract:
+
+1. Read all seven ROS position commands.
+2. Reject the cycle if any command is non-finite.
+3. Validate each command against the compiled MuJoCo actuator control range
+   when that actuator is control-limited.
+4. If any command is invalid, return an error before changing any Panda
+   actuator control value or advancing simulation time.
+5. If all commands are valid, copy them to the cached named Panda actuator
+   mappings for `actuator1` through `actuator7`.
+6. Leave the gripper/task actuator `actuator8` unchanged.
+7. Advance MuJoCo by exactly one call to `mj_step()`.
+
+A successful hardware `write()` therefore advances exactly one compiled MuJoCo
+physics timestep. The ROS control-loop `period` argument does not scale the
+number of MuJoCo physics steps. This makes simulation evolution deterministic
+for a fixed initial state and fixed sequence of hardware commands.
+
+For the current Panda insertion MJCF, the compiled MuJoCo timestep is 0.002 s.
+A dedicated real-MuJoCo controller-manager bringup can select an appropriate
+control-loop rate separately; changing that bringup rate does not change the
+one-step-per-successful-write hardware contract.
+
+After a successful `write()`, the next `read()` copies the resulting finite
+Panda `qpos` and `qvel` values into the corresponding ros2_control position and
+velocity state interfaces.
