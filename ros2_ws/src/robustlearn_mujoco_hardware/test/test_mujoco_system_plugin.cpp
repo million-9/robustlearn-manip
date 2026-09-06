@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -29,10 +31,34 @@
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "lifecycle_msgs/msg/state.hpp"
+#include "mujoco/mujoco.h"
 #include "pluginlib/class_loader.hpp"
 #include "rclcpp/clock.hpp"
 #include "rclcpp/logger.hpp"
 #include "robustlearn_mujoco_hardware/mujoco_system.hpp"
+
+namespace robustlearn_mujoco_hardware
+{
+
+class MuJoCoSystemTestPeer
+{
+public:
+  static void set_joint_state(
+    MuJoCoSystem & system,
+    const std::array<double, 7> & positions,
+    const std::array<double, 7> & velocities)
+  {
+    for (std::size_t index = 0; index < positions.size(); ++index) {
+      system.data_->qpos[system.qpos_addresses_[index]] =
+        positions[index];
+
+      system.data_->qvel[system.dof_addresses_[index]] =
+        velocities[index];
+    }
+  }
+};
+
+}  // namespace robustlearn_mujoco_hardware
 
 namespace
 {
@@ -365,6 +391,288 @@ TEST(MuJoCoSystemInitializationTest, actuator_targeting_wrong_joint_fails)
     hardware_interface::CallbackReturn::ERROR);
 }
 
+
+TEST(MuJoCoSystemReadTest, known_mujoco_state_updates_ros_state_interfaces)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> expected_positions = {
+    0.11,
+    -0.22,
+    0.33,
+    -0.44,
+    0.55,
+    -0.66,
+    0.77,
+  };
+
+  const std::array<double, 7> expected_velocities = {
+    -1.1,
+    1.2,
+    -1.3,
+    1.4,
+    -1.5,
+    1.6,
+    -1.7,
+  };
+
+  robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::set_joint_state(
+    *system_ptr,
+    expected_positions,
+    expected_velocities);
+
+  const auto first_read =
+    system_ptr->read(
+    rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+    rclcpp::Duration::from_seconds(0.001));
+
+  ASSERT_EQ(
+    first_read,
+    hardware_interface::return_type::OK);
+
+  for (std::size_t index = 0; index < expected_positions.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    const auto position_it =
+      std::find_if(
+        state_interfaces.begin(),
+        state_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_POSITION;
+        });
+
+    const auto velocity_it =
+      std::find_if(
+        state_interfaces.begin(),
+        state_interfaces.end(),
+      [&joint_name](const auto & interface)
+      {
+        return
+          interface->get_prefix_name() == joint_name &&
+          interface->get_interface_name() ==
+          hardware_interface::HW_IF_VELOCITY;
+        });
+
+    ASSERT_NE(position_it, state_interfaces.end());
+    ASSERT_NE(velocity_it, state_interfaces.end());
+
+    const auto position =
+      (*position_it)->get_optional<double>();
+
+    const auto velocity =
+      (*velocity_it)->get_optional<double>();
+
+    ASSERT_TRUE(position.has_value());
+    ASSERT_TRUE(velocity.has_value());
+
+    EXPECT_DOUBLE_EQ(
+      *position,
+      expected_positions[index]);
+
+    EXPECT_DOUBLE_EQ(
+      *velocity,
+      expected_velocities[index]);
+  }
+
+  const auto second_read =
+    system_ptr->read(
+    rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+    rclcpp::Duration::from_seconds(0.001));
+
+  EXPECT_EQ(
+    second_read,
+    hardware_interface::return_type::OK);
+
+  for (std::size_t index = 0; index < expected_positions.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    for (const auto & state_interface : state_interfaces) {
+      if (state_interface->get_prefix_name() != joint_name) {
+        continue;
+      }
+
+      const auto value =
+        state_interface->get_optional<double>();
+
+      ASSERT_TRUE(value.has_value());
+
+      if (
+        state_interface->get_interface_name() ==
+        hardware_interface::HW_IF_POSITION)
+      {
+        EXPECT_DOUBLE_EQ(
+          *value,
+          expected_positions[index]);
+      } else if (
+        state_interface->get_interface_name() ==
+        hardware_interface::HW_IF_VELOCITY)
+      {
+        EXPECT_DOUBLE_EQ(
+          *value,
+          expected_velocities[index]);
+      }
+    }
+  }
+}
+
+TEST(MuJoCoSystemReadTest, non_finite_mujoco_state_is_rejected_transactionally)
+{
+  auto system =
+    std::make_unique<robustlearn_mujoco_hardware::MuJoCoSystem>();
+
+  auto * system_ptr = system.get();
+
+  hardware_interface::HardwareComponent component(
+    std::move(system));
+
+  component.initialize(
+    make_component_params(make_valid_hardware_info()));
+
+  auto state_interfaces =
+    component.export_state_interfaces();
+
+  auto command_interfaces =
+    component.export_command_interfaces();
+
+  ASSERT_EQ(state_interfaces.size(), 14u);
+  ASSERT_EQ(command_interfaces.size(), 7u);
+
+  component.configure();
+  component.activate();
+
+  ASSERT_EQ(
+    component.get_lifecycle_id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+
+  const std::array<double, 7> valid_positions = {
+    0.10,
+    0.20,
+    0.30,
+    0.40,
+    0.50,
+    0.60,
+    0.70,
+  };
+
+  const std::array<double, 7> valid_velocities = {
+    -0.10,
+    -0.20,
+    -0.30,
+    -0.40,
+    -0.50,
+    -0.60,
+    -0.70,
+  };
+
+  robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::set_joint_state(
+    *system_ptr,
+    valid_positions,
+    valid_velocities);
+
+  ASSERT_EQ(
+    system_ptr->read(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.001)),
+    hardware_interface::return_type::OK);
+
+  std::array<double, 7> invalid_positions = {
+    1.10,
+    1.20,
+    1.30,
+    1.40,
+    1.50,
+    1.60,
+    1.70,
+  };
+
+  const std::array<double, 7> changed_velocities = {
+    -1.10,
+    -1.20,
+    -1.30,
+    -1.40,
+    -1.50,
+    -1.60,
+    -1.70,
+  };
+
+  invalid_positions[3] =
+    std::numeric_limits<double>::quiet_NaN();
+
+  robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::set_joint_state(
+    *system_ptr,
+    invalid_positions,
+    changed_velocities);
+
+  EXPECT_EQ(
+    system_ptr->read(
+      rclcpp::Time(0, 0, RCL_SYSTEM_TIME),
+      rclcpp::Duration::from_seconds(0.001)),
+    hardware_interface::return_type::ERROR);
+
+  for (std::size_t index = 0; index < valid_positions.size(); ++index) {
+    const std::string joint_name =
+      "panda_joint" + std::to_string(index + 1);
+
+    for (const auto & state_interface : state_interfaces) {
+      if (state_interface->get_prefix_name() != joint_name) {
+        continue;
+      }
+
+      const auto value =
+        state_interface->get_optional<double>();
+
+      ASSERT_TRUE(value.has_value());
+      EXPECT_TRUE(std::isfinite(*value));
+
+      if (
+        state_interface->get_interface_name() ==
+        hardware_interface::HW_IF_POSITION)
+      {
+        EXPECT_DOUBLE_EQ(
+          *value,
+          valid_positions[index]);
+      } else if (
+        state_interface->get_interface_name() ==
+        hardware_interface::HW_IF_VELOCITY)
+      {
+        EXPECT_DOUBLE_EQ(
+          *value,
+          valid_velocities[index]);
+      }
+    }
+  }
+}
 
 TEST(MuJoCoSystemLifecycleTest, activation_and_deactivation_keep_interfaces_finite)
 {

@@ -31,6 +31,8 @@ struct mjData_;
 namespace robustlearn_mujoco_hardware
 {
 
+class MuJoCoSystemTestPeer;
+
 class MuJoCoSystem : public hardware_interface::SystemInterface
 {
 public:
@@ -55,6 +57,8 @@ public:
     const rclcpp::Duration & period) override;
 
 private:
+  friend class MuJoCoSystemTestPeer;
+
   struct MjSpecDeleter
   {
     void operator()(mjSpec_ * spec) const noexcept;

@@ -517,6 +517,64 @@ hardware_interface::return_type MuJoCoSystem::read(
   const rclcpp::Time & /* time */,
   const rclcpp::Duration & /* period */)
 {
+  const auto logger = get_logger();
+
+  if (!model_ || !data_) {
+    RCLCPP_ERROR(
+      logger,
+      "Cannot read MuJoCo hardware state before model initialization");
+
+    return hardware_interface::return_type::ERROR;
+  }
+
+  std::array<double, 7> positions{};
+  std::array<double, 7> velocities{};
+
+  for (std::size_t index = 0; index < kRosPandaJointNames.size(); ++index) {
+    const double position =
+      data_->qpos[qpos_addresses_[index]];
+
+    const double velocity =
+      data_->qvel[dof_addresses_[index]];
+
+    if (!std::isfinite(position) || !std::isfinite(velocity)) {
+      RCLCPP_ERROR(
+        logger,
+        "MuJoCo joint '%s' has non-finite state during read",
+        kMujocoPandaJointNames[index]);
+
+      return hardware_interface::return_type::ERROR;
+    }
+
+    positions[index] = position;
+    velocities[index] = velocity;
+  }
+
+  try {
+    for (std::size_t index = 0; index < kRosPandaJointNames.size(); ++index) {
+      const std::string joint_prefix =
+        kRosPandaJointNames[index];
+
+      set_state(
+        joint_prefix + "/" + hardware_interface::HW_IF_POSITION,
+        positions[index]);
+
+      set_state(
+        joint_prefix + "/" + hardware_interface::HW_IF_VELOCITY,
+        velocities[index]);
+    }
+  } catch (const std::exception & error) {
+    RCLCPP_ERROR(
+      logger,
+      "Failed to update ROS 2 control state interfaces during read: %s",
+      error.what());
+
+    return hardware_interface::return_type::ERROR;
+  }
+
+  joint_positions_ = positions;
+  joint_velocities_ = velocities;
+
   return hardware_interface::return_type::OK;
 }
 
