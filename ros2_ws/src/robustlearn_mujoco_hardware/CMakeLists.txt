@@ -233,6 +233,11 @@ ament_export_dependencies(
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_index_cpp REQUIRED)
+  find_package(Boost REQUIRED)
+  find_package(moveit_core REQUIRED)
+  find_package(srdfdom REQUIRED)
+  find_package(urdf REQUIRED)
 
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
@@ -267,6 +272,37 @@ if(BUILD_TESTING)
     hardware_interface
     pluginlib
     rclcpp
+  )
+
+  ament_add_gtest(
+    test_cross_model_fk
+    test/test_cross_model_fk.cpp
+  )
+
+  target_link_libraries(
+    test_cross_model_fk
+    MuJoCo::mujoco
+  )
+
+  target_compile_definitions(
+    test_cross_model_fk
+    PRIVATE
+      ROBUSTLEARN_TEST_MODEL_PATH="${ROBUSTLEARN_REPOSITORY_ROOT}/robot_description/mjcf/insertion/panda_insertion.xml"
+      ROBUSTLEARN_MAPPING_CONTRACT_PATH="${ROBUSTLEARN_REPOSITORY_ROOT}/robot_description/panda_joint_mapping.json"
+  )
+
+  target_include_directories(
+    test_cross_model_fk
+    PRIVATE
+      ${Boost_INCLUDE_DIRS}
+  )
+
+  ament_target_dependencies(
+    test_cross_model_fk
+    ament_index_cpp
+    moveit_core
+    srdfdom
+    urdf
   )
 endif()
 

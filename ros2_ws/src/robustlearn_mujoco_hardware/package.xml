@@ -17,6 +17,13 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_index_cpp</test_depend>
+  <test_depend>boost</test_depend>
+  <test_depend>moveit_core</test_depend>
+  <test_depend>moveit_resources_panda_description</test_depend>
+  <test_depend>moveit_resources_panda_moveit_config</test_depend>
+  <test_depend>srdfdom</test_depend>
+  <test_depend>urdf</test_depend>
 
   <!--
     MuJoCo itself is an external non-ROS dependency. The CMake configuration
