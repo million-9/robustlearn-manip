@@ -247,6 +247,7 @@ if(BUILD_TESTING)
   target_link_libraries(
     test_mujoco_system_plugin
     ${PROJECT_NAME}
+    MuJoCo::mujoco
   )
 
   get_filename_component(
