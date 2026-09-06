@@ -21,6 +21,11 @@ if(BUILD_TESTING)
     test/test_mujoco_panda_launch.py
     TIMEOUT 25
   )
+
+  add_launch_test(
+    test/test_mujoco_trajectory_launch.py
+    TIMEOUT 30
+  )
 endif()
 
 ament_package()
