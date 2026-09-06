@@ -6,6 +6,7 @@ import mujoco
 import numpy as np
 from numpy.typing import NDArray
 
+from robustlearn.config import PandaInsertionTaskConfig
 from robustlearn.sim.insertion import load_insertion_model
 from robustlearn.sim.sensing import (
     PandaSensorReader,
@@ -142,7 +143,11 @@ class MuJoCoSimulation:
         """Return an independent snapshot of Panda sensor outputs."""
         return self._sensor_reader.snapshot(self.data)
 
-    def task_status(self) -> InsertionTaskStatus:
+    def task_status(
+        self,
+        *,
+        config: PandaInsertionTaskConfig | None = None,
+    ) -> InsertionTaskStatus:
         """Evaluate the current Panda insertion task geometry."""
         peg_tip_id = self._site_id("peg_tip")
         receptacle_center_id = self._site_id("receptacle_center")
@@ -161,6 +166,7 @@ class MuJoCoSimulation:
                 self.data.site_xpos[insertion_axis_id],
                 dtype=np.float64,
             ),
+            config=config,
         )
 
     def snapshot(self) -> SimulationSnapshot:

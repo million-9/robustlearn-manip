@@ -11,7 +11,6 @@ from robustlearn.sim.control import (
     panda_site_spatial_jacobian,
 )
 from robustlearn.sim.simulation import TASK_SITE_NAMES
-from robustlearn.sim.task import SUCCESS_INSERTION_DEPTH
 
 FloatArray = NDArray[np.float64]
 
@@ -78,7 +77,7 @@ def scripted_insertion_action(
 
     insertion_depth = -axial_offset
     remaining_depth = (
-        SUCCESS_INSERTION_DEPTH
+        env.config.success_insertion_depth_m
         - insertion_depth
     )
 
