@@ -232,3 +232,26 @@ def test_zero_length_insertion_axis_is_rejected() -> None:
             receptacle,
             receptacle.copy(),
         )
+
+
+def test_custom_task_config_controls_success_thresholds() -> None:
+    from robustlearn.config import PandaInsertionTaskConfig
+
+    config = PandaInsertionTaskConfig(
+        success_lateral_tolerance_m=0.003,
+        success_insertion_depth_m=0.005,
+        failure_lateral_error_m=0.004,
+    )
+
+    status = evaluate_insertion_task(
+        np.asarray(
+            [0.002, 0.0, -0.006],
+            dtype=np.float64,
+        ),
+        np.zeros(3, dtype=np.float64),
+        z_axis(),
+        config=config,
+    )
+
+    assert status.success is True
+    assert status.failure is False

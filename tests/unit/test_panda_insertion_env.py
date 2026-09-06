@@ -5,12 +5,15 @@ import pytest
 from gymnasium import spaces
 from gymnasium.utils.env_checker import check_env
 
+from robustlearn.config import PandaInsertionTaskConfig
 from robustlearn.envs import PandaInsertionEnv
 from robustlearn.sim.task import InsertionTaskStatus
 
 
 def valid_action(env: PandaInsertionEnv) -> np.ndarray:
     """Return a deterministic action guaranteed to belong to the action space."""
+    assert isinstance(env.action_space, spaces.Box)
+
     return np.asarray(
         (env.action_space.low + env.action_space.high) / 2.0,
         dtype=env.action_space.dtype,
@@ -223,6 +226,8 @@ def test_invalid_action_is_rejected() -> None:
 
     env.reset(seed=42)
 
+    assert isinstance(env.action_space, spaces.Box)
+
     invalid_action = env.action_space.high.copy()
     invalid_action[0] += 1.0
 
@@ -313,7 +318,7 @@ def test_successful_task_status_terminates_episode(
     monkeypatch.setattr(
         env.simulation,
         "task_status",
-        lambda: success_status,
+        lambda **_: success_status,
     )
 
     _, reward, terminated, truncated, info = env.step(
@@ -346,7 +351,7 @@ def test_failure_task_status_terminates_episode(
     monkeypatch.setattr(
         env.simulation,
         "task_status",
-        lambda: failure_status,
+        lambda **_: failure_status,
     )
 
     _, reward, terminated, truncated, info = env.step(
@@ -379,3 +384,32 @@ def test_time_limit_truncation_is_not_task_failure() -> None:
     assert info["task_failure"] is False
 
     env.close()
+
+
+
+def test_environment_uses_explicit_task_config() -> None:
+    config = PandaInsertionTaskConfig(
+        frame_skip=3,
+        max_episode_steps=7,
+    )
+
+    env = PandaInsertionEnv(config=config)
+
+    assert env.config is config
+    assert env.frame_skip == 3
+    assert env.max_episode_steps == 7
+
+    env.close()
+
+
+def test_environment_rejects_config_with_legacy_overrides() -> None:
+    config = PandaInsertionTaskConfig()
+
+    with pytest.raises(
+        ValueError,
+        match="config cannot be combined",
+    ):
+        PandaInsertionEnv(
+            config=config,
+            frame_skip=3,
+        )

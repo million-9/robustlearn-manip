@@ -7,6 +7,7 @@ import numpy as np
 from gymnasium import spaces
 from numpy.typing import NDArray
 
+from robustlearn.config import PandaInsertionTaskConfig
 from robustlearn.sim import MuJoCoSimulation
 
 FloatArray = NDArray[np.float64]
@@ -22,22 +23,35 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
     def __init__(
         self,
         *,
-        frame_skip: int = 5,
-        max_episode_steps: int = 200,
+        config: PandaInsertionTaskConfig | None = None,
+        frame_skip: int | None = None,
+        max_episode_steps: int | None = None,
     ) -> None:
         """Create a headless Panda insertion environment."""
         super().__init__()
 
-        if frame_skip < 1:
-            raise ValueError("frame_skip must be at least 1")
+        if config is not None and (
+            frame_skip is not None or max_episode_steps is not None
+        ):
+            raise ValueError(
+                "config cannot be combined with frame_skip or max_episode_steps"
+            )
 
-        if max_episode_steps < 1:
-            raise ValueError("max_episode_steps must be at least 1")
+        if config is None:
+            config = PandaInsertionTaskConfig(
+                frame_skip=5 if frame_skip is None else frame_skip,
+                max_episode_steps=(
+                    200
+                    if max_episode_steps is None
+                    else max_episode_steps
+                ),
+            )
 
+        self.config = config
         self.simulation = MuJoCoSimulation()
 
-        self.frame_skip = frame_skip
-        self.max_episode_steps = max_episode_steps
+        self.frame_skip = config.frame_skip
+        self.max_episode_steps = config.max_episode_steps
         self._elapsed_steps = 0
 
         ctrl_limited = np.asarray(
@@ -97,7 +111,7 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
 
     def _info(self) -> dict[str, Any]:
         """Return diagnostic information for the current episode."""
-        task_status = self.simulation.task_status()
+        task_status = self.simulation.task_status(config=self.config)
 
         return {
             "simulation_time": float(self.simulation.data.time),
@@ -167,7 +181,7 @@ class PandaInsertionEnv(gym.Env[FloatArray, FloatArray]):
         # Week 5 task evaluation.
         reward = 0.0
 
-        task_status = self.simulation.task_status()
+        task_status = self.simulation.task_status(config=self.config)
         terminated = task_status.terminated
 
         # The episode step limit is truncation, not task failure.
