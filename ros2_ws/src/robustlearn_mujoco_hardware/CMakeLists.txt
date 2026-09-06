@@ -167,6 +167,30 @@ target_link_libraries(
   MuJoCo::mujoco
 )
 
+# ament_target_dependencies() uses the plain target_link_libraries()
+# signature for this target, so keep that signature consistently.
+# MuJoCo is a private implementation dependency and must not be exposed
+# through the installed ROS package's INTERFACE_LINK_LIBRARIES.
+get_target_property(
+  ROBUSTLEARN_INTERFACE_LINK_LIBRARIES
+  ${PROJECT_NAME}
+  INTERFACE_LINK_LIBRARIES
+)
+
+if(ROBUSTLEARN_INTERFACE_LINK_LIBRARIES)
+  list(
+    REMOVE_ITEM
+    ROBUSTLEARN_INTERFACE_LINK_LIBRARIES
+    MuJoCo::mujoco
+  )
+
+  set_target_properties(
+    ${PROJECT_NAME}
+    PROPERTIES
+      INTERFACE_LINK_LIBRARIES "${ROBUSTLEARN_INTERFACE_LINK_LIBRARIES}"
+  )
+endif()
+
 # MuJoCo may come from the project's Python environment rather than a
 # system library directory. Preserve that resolved location in the installed
 # plugin so pluginlib can load its MuJoCo dependency at runtime.
@@ -220,10 +244,28 @@ if(BUILD_TESTING)
     test/test_mujoco_system_plugin.cpp
   )
 
+  target_link_libraries(
+    test_mujoco_system_plugin
+    ${PROJECT_NAME}
+  )
+
+  get_filename_component(
+    ROBUSTLEARN_REPOSITORY_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
+    ABSOLUTE
+  )
+
+  target_compile_definitions(
+    test_mujoco_system_plugin
+    PRIVATE
+      ROBUSTLEARN_TEST_MODEL_PATH="${ROBUSTLEARN_REPOSITORY_ROOT}/robot_description/mjcf/insertion/panda_insertion.xml"
+  )
+
   ament_target_dependencies(
     test_mujoco_system_plugin
     hardware_interface
     pluginlib
+    rclcpp
   )
 endif()
 
