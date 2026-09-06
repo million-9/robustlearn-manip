@@ -14,11 +14,19 @@
 
 #pragma once
 
+#include <array>
+#include <memory>
+
+struct mjSpec_;
+struct mjModel_;
+struct mjData_;
+
 #include "hardware_interface/hardware_component_interface.hpp"
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "rclcpp/duration.hpp"
 #include "rclcpp/time.hpp"
+#include "rclcpp_lifecycle/state.hpp"
 
 namespace robustlearn_mujoco_hardware
 {
@@ -32,6 +40,12 @@ public:
   hardware_interface::CallbackReturn on_init(
     const hardware_interface::HardwareComponentInterfaceParams & params) override;
 
+  hardware_interface::CallbackReturn on_activate(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  hardware_interface::CallbackReturn on_deactivate(
+    const rclcpp_lifecycle::State & previous_state) override;
+
   hardware_interface::return_type read(
     const rclcpp::Time & time,
     const rclcpp::Duration & period) override;
@@ -39,6 +53,38 @@ public:
   hardware_interface::return_type write(
     const rclcpp::Time & time,
     const rclcpp::Duration & period) override;
+
+private:
+  struct MjSpecDeleter
+  {
+    void operator()(mjSpec_ * spec) const noexcept;
+  };
+
+  struct MjModelDeleter
+  {
+    void operator()(mjModel_ * model) const noexcept;
+  };
+
+  struct MjDataDeleter
+  {
+    void operator()(mjData_ * data) const noexcept;
+  };
+
+  using MjSpecPtr = std::unique_ptr<mjSpec_, MjSpecDeleter>;
+  using MjModelPtr = std::unique_ptr<mjModel_, MjModelDeleter>;
+  using MjDataPtr = std::unique_ptr<mjData_, MjDataDeleter>;
+
+  MjSpecPtr spec_;
+  MjModelPtr model_;
+  MjDataPtr data_;
+
+  std::array<int, 7> qpos_addresses_{};
+  std::array<int, 7> dof_addresses_{};
+  std::array<int, 7> actuator_ids_{};
+
+  std::array<double, 7> joint_positions_{};
+  std::array<double, 7> joint_velocities_{};
+  std::array<double, 7> joint_commands_{};
 };
 
 }  // namespace robustlearn_mujoco_hardware

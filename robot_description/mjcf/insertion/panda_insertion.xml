@@ -1,0 +1,41 @@
+<mujoco model="robustlearn panda insertion task">
+  <option integrator="implicitfast"/>
+
+  <asset>
+    <!--
+      The Panda model remains vendored and unmodified. This project-owned
+      entry point composes it with RobustLearn insertion-task assets.
+    -->
+    <model
+      name="panda"
+      file="../franka_emika_panda/panda.xml"
+    />
+
+    <model
+      name="workcell"
+      file="workcell.xml"
+    />
+
+    <!--
+      The hardware plugin attaches this model's tool_mount frame to the
+      Panda hand through the MuJoCo mjSpec API before compilation.
+    -->
+    <model
+      name="fixed_peg"
+      file="fixed_peg.xml"
+    />
+  </asset>
+
+  <worldbody>
+    <attach
+      model="panda"
+      prefix=""
+    />
+
+    <attach
+      model="workcell"
+      frame="workcell_root"
+      prefix=""
+    />
+  </worldbody>
+</mujoco>
