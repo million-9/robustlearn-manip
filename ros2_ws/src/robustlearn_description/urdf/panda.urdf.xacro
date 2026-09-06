@@ -7,6 +7,14 @@
   <!-- ros2_control definition -->
   <xacro:include filename="panda.ros2_control.xacro"/>
 
+  <xacro:arg
+    name="hardware_plugin"
+    default="mock_components/GenericSystem"/>
+
+  <xacro:arg
+    name="model_path"
+    default=""/>
+
   <!-- Base -->
   <link name="panda_link0"/>
 
@@ -102,6 +110,9 @@
   </joint>
 
   <!-- Attach ros2_control hardware to the seven joints above -->
-  <xacro:panda_ros2_control name="PandaSystem"/>
+  <xacro:panda_ros2_control
+    name="PandaSystem"
+    hardware_plugin="$(arg hardware_plugin)"
+    model_path="$(arg model_path)"/>
 
 </robot>

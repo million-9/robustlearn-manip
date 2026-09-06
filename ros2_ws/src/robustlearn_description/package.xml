@@ -7,7 +7,7 @@
   <version>0.0.0</version>
 
   <description>
-    Robot description and ros2_control mock-hardware bringup for RobustLearn-Manip.
+    Robot description and ros2_control mock and MuJoCo hardware bringup for RobustLearn-Manip.
   </description>
 
   <maintainer email="mhd.musthafa.de@gmail.com">
@@ -26,10 +26,16 @@
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>hardware_interface</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>robustlearn_mujoco_hardware</exec_depend>
   <exec_depend>joint_trajectory_controller</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>controller_manager_msgs</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>sensor_msgs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

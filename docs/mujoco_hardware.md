@@ -120,3 +120,142 @@ one-step-per-successful-write hardware contract.
 After a successful `write()`, the next `read()` copies the resulting finite
 Panda `qpos` and `qvel` values into the corresponding ros2_control position and
 velocity state interfaces.
+
+## Week 7 MuJoCo ros2_control bringup
+
+The dedicated Week 7 bringup uses the project-owned MuJoCo hardware plugin
+without replacing the existing mock-hardware workflow.
+
+The real-MuJoCo launch starts:
+
+    robot_state_publisher
+            |
+            v
+    controller_manager
+            |
+            +-- robustlearn_mujoco_hardware/MuJoCoSystem
+            |
+            +-- joint_state_broadcaster
+
+The trajectory controller is intentionally not started by this launch. Joint
+trajectory execution is deferred to Week 8.
+
+The dedicated controller-manager configuration runs at 500 Hz, matching the
+current Panda insertion model's 0.002 s MuJoCo timestep and the hardware
+contract of exactly one mj_step() per successful write().
+
+### Build
+
+From the repository root:
+
+    uv sync --locked --no-dev
+
+    export ROBUSTLEARN_MUJOCO_ROOT="$(
+      uv run --no-sync python -c \
+        'import mujoco, pathlib; print(pathlib.Path(mujoco.__file__).resolve().parent)'
+    )"
+
+    source /opt/ros/jazzy/setup.bash
+
+    cd ros2_ws
+    colcon build --symlink-install
+    source install/setup.bash
+    cd ..
+
+### Launch
+
+Resolve the project-owned MJCF entry point:
+
+    MODEL_PATH="$(
+      realpath robot_description/mjcf/insertion/panda_insertion.xml
+    )"
+
+Start the MuJoCo-backed Panda:
+
+    ros2 launch \
+      robustlearn_description \
+      mujoco_panda.launch.py \
+      model_path:="$MODEL_PATH"
+
+The model_path launch argument is required. The MuJoCo acceptance launch
+explicitly selects:
+
+    robustlearn_mujoco_hardware/MuJoCoSystem
+
+The existing mock_panda.launch.py remains available separately and continues
+to use mock_components/GenericSystem.
+
+### Inspect the hardware component
+
+In another terminal with ROS 2 and the workspace sourced:
+
+    ros2 service call \
+      /controller_manager/list_hardware_components \
+      controller_manager_msgs/srv/ListHardwareComponents \
+      "{}"
+
+The PandaSystem component must report:
+
+    plugin_name='robustlearn_mujoco_hardware/MuJoCoSystem'
+    state ... id=3 ... label='active'
+    rw_rate=500
+
+This check distinguishes the real MuJoCo hardware path from the mock
+GenericSystem path.
+
+### Inspect the controller
+
+Verify that the joint-state broadcaster is active:
+
+    ros2 control list_controllers \
+      --controller-manager /controller_manager
+
+Expected controller state:
+
+    joint_state_broadcaster ... active
+
+### Inspect Panda joint state
+
+Read one published joint-state message:
+
+    ros2 topic echo \
+      /joint_states \
+      sensor_msgs/msg/JointState \
+      --once
+
+The message must contain:
+
+    panda_joint1
+    panda_joint2
+    panda_joint3
+    panda_joint4
+    panda_joint5
+    panda_joint6
+    panda_joint7
+
+All seven published position values and all seven published velocity values
+must be finite.
+
+The hardware does not export an effort state interface, so the
+joint_state_broadcaster may publish unavailable effort entries as NaN.
+Week 7 acceptance therefore validates position and velocity state only.
+
+### Automated acceptance
+
+The launch-level acceptance test is:
+
+    ros2_ws/src/robustlearn_description/test/test_mujoco_panda_launch.py
+
+It verifies that:
+
+- exactly one PandaSystem hardware component exists;
+- its plugin is robustlearn_mujoco_hardware/MuJoCoSystem;
+- the hardware lifecycle state is active;
+- the hardware read/write rate is 500 Hz;
+- joint_state_broadcaster becomes active;
+- /joint_states contains all seven Panda arm joints;
+- all seven positions are finite;
+- all seven velocities are finite.
+
+The test uses ROS service clients and a typed sensor_msgs/msg/JointState
+subscription rather than parsing command-line output.

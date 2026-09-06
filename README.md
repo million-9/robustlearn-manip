@@ -32,13 +32,16 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 6: deterministic task configuration, domain randomization, policy API, and seeded evaluation.**
+**Week 7: project-owned MuJoCo ros2_control hardware integration and validated Panda joint-state bringup.**
 
-RobustLearn-Manip now has the reproducible configuration and evaluation
-foundation required for later imitation-learning and reinforcement-learning
-work.
+RobustLearn-Manip now connects the project-owned MuJoCo Panda simulation to
+ROS 2 through a custom ros2_control SystemInterface.
 
-Completed through Week 6:
+The Week 7 milestone establishes a real MuJoCo-backed controller-manager
+bringup while preserving the existing mock-hardware workflow for isolated ROS
+testing.
+
+Completed through Week 7:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -63,80 +66,85 @@ Completed through Week 6:
 - insertion success and failure evaluation implemented
 - deterministic Jacobian-based scripted Panda insertion controller implemented
 - scripted insertion reaches the clean task success condition
-- explicit `PandaInsertionTaskConfig` schema implemented
-- explicit randomization configuration and finite bounded ranges implemented
-- deterministic receptacle X/Y/yaw randomization implemented
-- randomization disabled by default so clean Week 5 behavior is preserved
-- stable 38D state-based learned-policy observation API implemented
-- stable 4D Cartesian policy action API implemented
-- policy API kept separate from low-level MuJoCo actuator controls
-- headless seeded multi-episode evaluation runner implemented
-- structured per-episode and aggregate evaluation records implemented
-- clean and randomized evaluation paths verified reproducible
-- Week 6 integrated acceptance workflow implemented
+- explicit PandaInsertionTaskConfig schema implemented
+- deterministic domain randomization implemented
+- stable learned-policy observation and action APIs implemented
+- seeded multi-episode evaluation runner implemented
+- reproducible 100-episode Week 6 evaluation completed
+- project-owned `robustlearn_mujoco_hardware` package implemented
+- custom `robustlearn_mujoco_hardware/MuJoCoSystem` plugin registered
+- Panda MJCF loading and hardware lifecycle integration implemented
+- named Panda ROS-joint to MuJoCo-joint mappings implemented
+- named Panda actuator mappings implemented
+- MuJoCo-to-ros2_control position and velocity read path implemented
+- transactional seven-joint position-command write path implemented
+- exactly one `mj_step()` performed per successful hardware write
+- dedicated real-MuJoCo Panda ros2_control bringup implemented
+- existing `mock_components/GenericSystem` bringup preserved
+- dedicated MuJoCo controller-manager configuration runs at 500 Hz
+- MuJoCo `PandaSystem` loads through controller_manager
+- MuJoCo hardware configures and activates successfully
+- `joint_state_broadcaster` loads and activates successfully
+- `/joint_states` publishes `panda_joint1` through `panda_joint7`
+- all seven published Panda positions verified finite
+- all seven published Panda velocities verified finite
+- launch-level MuJoCo hardware acceptance test implemented
+- launch acceptance isolated from concurrent ROS controller-manager tests
+- full Week 7 ROS workspace acceptance passes with zero errors and failures
 
-The Week 6 milestone gate is:
-
-```text
-100 seeded episodes execute automatically.
-```
-
-The validated full clean run used:
-
-```text
-base seed: 2026
-episode count: 100
-seed range: 2026..2125
-```
-
-and produced:
-
-```text
-episodes: 100
-successes: 100
-failures: 0
-truncated: 0
-success rate: 1.000
-all recorded scalar results finite: yes
-```
-
-The complete 100-episode result set was then regenerated using the same
-configuration and ordered seed set.
-
-The result records were exactly identical.
-
-The lightweight integrated acceptance test is:
+The Week 7 milestone gate is:
 
 ```text
-tests/integration/test_week6_acceptance.py
+Project-owned MuJoCo hardware plugin loads through controller_manager
+and publishes valid Panda joint state.
 ```
 
-Run it with:
-
-```bash
-uv run pytest tests/integration/test_week6_acceptance.py -q
-```
-
-Expected result:
+The validated real-MuJoCo runtime reports:
 
 ```text
-3 passed
+hardware component: PandaSystem
+plugin: robustlearn_mujoco_hardware/MuJoCoSystem
+hardware lifecycle: active
+controller-manager rate: 500 Hz
+joint_state_broadcaster: active
+published Panda joints: 7
+published positions: finite
+published velocities: finite
 ```
 
-Detailed Week 6 configuration, randomization, policy, evaluation, and milestone
-documentation is available in:
+The automated launch acceptance test is:
 
 ```text
-docs/week6_configuration.md
-docs/week6_randomization.md
-docs/week6_policy_api.md
-docs/week6_evaluation.md
-docs/week6_acceptance.md
+ros2_ws/src/robustlearn_description/test/test_mujoco_panda_launch.py
 ```
 
-Work beyond Week 6 intentionally includes classical insertion benchmarking,
-demonstration collection, Behaviour Cloning, DAgger, SAC, larger robustness
-experiments, and deployment-oriented integration.
+The final Week 7 ROS workspace acceptance result is:
+
+```text
+102 tests
+0 errors
+0 failures
+11 skipped
+```
+
+Detailed MuJoCo ros2_control hardware and Week 7 bringup documentation is
+available in:
+
+```text
+docs/mujoco_hardware.md
+```
+
+The Week 6 deterministic configuration, randomization, policy API, seeded
+evaluation, and 100-episode reproducibility results remain part of the
+completed project foundation.
+
+Work intentionally deferred to Week 8 includes:
+
+- joint-trajectory-controller command execution in MuJoCo
+- MoveIt execution through the real MuJoCo hardware path
+- URDF-to-MJCF mapping validation
+- cross-model forward-kinematics validation
+- planning-scene integration
 
 ## Development Environment
 
