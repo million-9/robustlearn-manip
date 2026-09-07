@@ -497,6 +497,53 @@ class TestMoveItMuJoCoExecution(unittest.TestCase):
             ),
         )
 
+        controller_response = self._call_service(
+            controller_manager_msgs.srv.ListControllers,
+            '/controller_manager/list_controllers',
+        )
+
+        panda_arm_controllers = [
+            controller
+            for controller in controller_response.controller
+            if controller.name == 'panda_arm_controller'
+        ]
+
+        self.assertEqual(
+            len(panda_arm_controllers),
+            1,
+            (
+                'Expected exactly one panda_arm_controller, '
+                f'got {len(panda_arm_controllers)}.'
+            ),
+        )
+
+        panda_arm_controller = panda_arm_controllers[0]
+
+        expected_claimed_interfaces = {
+            f'{joint_name}/position'
+            for joint_name in PANDA_JOINTS
+        }
+
+        self.assertEqual(
+            len(panda_arm_controller.claimed_interfaces),
+            len(PANDA_JOINTS),
+            (
+                'panda_arm_controller did not claim exactly '
+                'seven command interfaces: '
+                f'{panda_arm_controller.claimed_interfaces}'
+            ),
+        )
+
+        self.assertEqual(
+            set(panda_arm_controller.claimed_interfaces),
+            expected_claimed_interfaces,
+            (
+                'panda_arm_controller claimed unexpected '
+                'command interfaces: '
+                f'{panda_arm_controller.claimed_interfaces}'
+            ),
+        )
+
         self.assertTrue(
             self._spin_until(
                 self._complete_joint_state_available,

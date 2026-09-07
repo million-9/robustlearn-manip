@@ -32,16 +32,15 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 7: project-owned MuJoCo ros2_control hardware integration and validated Panda joint-state bringup.**
+**Week 8: validated MoveIt 2 trajectory execution through the project-owned MuJoCo ros2_control hardware path.**
 
-RobustLearn-Manip now connects the project-owned MuJoCo Panda simulation to
-ROS 2 through a custom ros2_control SystemInterface.
+RobustLearn-Manip now connects MoveIt 2 planning and trajectory execution to
+the real project-owned MuJoCo Panda backend through ros2_control.
 
-The Week 7 milestone establishes a real MuJoCo-backed controller-manager
-bringup while preserving the existing mock-hardware workflow for isolated ROS
-testing.
+The Week 8 milestone completes the planning-to-execution infrastructure while
+preserving the existing mock-hardware and direct-controller workflows.
 
-Completed through Week 7:
+Completed through Week 8:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -53,98 +52,141 @@ Completed through Week 7:
 - Python CI running in GitHub Actions
 - ROS 2 CI running in GitHub Actions
 - clean-checkout reproducibility workflow established
-- project-specific ROS 2 topics, services, actions, parameters, and launch workflows implemented
-- Franka Panda URDF/Xacro and MoveIt-side robot-description foundation established
-- Franka Panda MuJoCo model vendored with provenance and licensing recorded
-- insertion workcell, fixed tool, receptacle, and stable task geometry implemented
-- deterministic MuJoCo reset and simulator-state snapshot layer implemented
+- project-specific ROS 2 communication and launch workflows implemented
+- Franka Panda URDF/Xacro and MoveIt robot-description foundation established
+- Franka Panda MuJoCo model vendored with provenance and licensing preserved
+- insertion workcell and stable task geometry implemented
+- deterministic MuJoCo simulation and reset layer implemented
 - seeded Gymnasium Panda insertion environment implemented
-- deterministic fixed rollouts verified
-- Panda joint-position and joint-velocity sensing implemented
-- six-axis wrist force/torque sensing implemented
-- RGB/depth debug camera implemented
-- insertion success and failure evaluation implemented
-- deterministic Jacobian-based scripted Panda insertion controller implemented
-- scripted insertion reaches the clean task success condition
-- explicit PandaInsertionTaskConfig schema implemented
-- deterministic domain randomization implemented
+- Panda joint-state, force/torque, RGB, and depth sensing implemented
+- deterministic Jacobian-based scripted insertion controller implemented
+- explicit task configuration and seeded domain randomization implemented
 - stable learned-policy observation and action APIs implemented
-- seeded multi-episode evaluation runner implemented
-- reproducible 100-episode Week 6 evaluation completed
+- reproducible seeded multi-episode evaluation implemented
+- 100-episode Week 6 reproducibility milestone completed
 - project-owned `robustlearn_mujoco_hardware` package implemented
-- custom `robustlearn_mujoco_hardware/MuJoCoSystem` plugin registered
-- Panda MJCF loading and hardware lifecycle integration implemented
-- named Panda ROS-joint to MuJoCo-joint mappings implemented
-- named Panda actuator mappings implemented
-- MuJoCo-to-ros2_control position and velocity read path implemented
-- transactional seven-joint position-command write path implemented
-- exactly one `mj_step()` performed per successful hardware write
-- dedicated real-MuJoCo Panda ros2_control bringup implemented
-- existing `mock_components/GenericSystem` bringup preserved
-- dedicated MuJoCo controller-manager configuration runs at 500 Hz
-- MuJoCo `PandaSystem` loads through controller_manager
-- MuJoCo hardware configures and activates successfully
-- `joint_state_broadcaster` loads and activates successfully
-- `/joint_states` publishes `panda_joint1` through `panda_joint7`
-- all seven published Panda positions verified finite
-- all seven published Panda velocities verified finite
-- launch-level MuJoCo hardware acceptance test implemented
-- launch acceptance isolated from concurrent ROS controller-manager tests
-- full Week 7 ROS workspace acceptance passes with zero errors and failures
+- custom `robustlearn_mujoco_hardware/MuJoCoSystem` plugin implemented
+- real MuJoCo Panda hardware lifecycle integrated with ros2_control
+- MuJoCo position and velocity feedback exposed through ros2_control
+- transactional seven-joint position-command path implemented
+- real `joint_state_broadcaster` bringup implemented
+- real `panda_arm_controller` trajectory controller implemented
+- direct `FollowJointTrajectory` execution through MuJoCo validated
+- all seven Panda position command interfaces verified claimed during execution
+- ROS Panda joints mapped explicitly to MuJoCo joints and actuators
+- project-owned URDF-to-MJCF mapping contract implemented and validated
+- cross-model forward kinematics validated between MoveIt/URDF and MuJoCo/MJCF
+- MoveIt 2 OMPL planning integrated with the real MuJoCo hardware path
+- MoveIt receives complete finite Panda state from MuJoCo
+- MoveIt-planned trajectories execute through `panda_arm_controller`
+- MuJoCo joint feedback verified to change during MoveIt execution
+- final trajectory state verified within the documented 0.02 rad tolerance
+- exactly one real `PandaSystem` hardware component verified active
+- `mock_components/GenericSystem` verified absent from the real-MuJoCo path
+- existing mock Panda ros2_control bringup preserved
+- existing mock MoveIt demo preserved
+- vendored MuJoCo Menagerie Panda files remain untouched
+- automated Week 8 acceptance runner implemented
 
-The Week 7 milestone gate is:
+The Week 8 milestone gate is:
 
-```text
-Project-owned MuJoCo hardware plugin loads through controller_manager
-and publishes valid Panda joint state.
-```
+    MoveIt trajectory executes successfully in MuJoCo through
+    robustlearn_mujoco_hardware/MuJoCoSystem.
 
-The validated real-MuJoCo runtime reports:
+The validated execution architecture is:
 
-```text
-hardware component: PandaSystem
-plugin: robustlearn_mujoco_hardware/MuJoCoSystem
-hardware lifecycle: active
-controller-manager rate: 500 Hz
-joint_state_broadcaster: active
-published Panda joints: 7
-published positions: finite
-published velocities: finite
-```
+    MoveIt 2
+        |
+        v
+    MoveItSimpleControllerManager
+        |
+        v
+    panda_arm_controller
+        |
+        v
+    controller_manager
+        |
+        v
+    PandaSystem
+        |
+        v
+    robustlearn_mujoco_hardware/MuJoCoSystem
+        |
+        v
+    MuJoCo Panda
 
-The automated launch acceptance test is:
+The real runtime contract includes:
 
-```text
-ros2_ws/src/robustlearn_description/test/test_mujoco_panda_launch.py
-```
+    hardware component: PandaSystem
+    hardware plugin: robustlearn_mujoco_hardware/MuJoCoSystem
+    hardware lifecycle: active
+    joint_state_broadcaster: active
+    panda_arm_controller: active
+    commanded arm joints: 7
+    claimed command interfaces: 7 position interfaces
+    MoveIt planning: success
+    MoveIt execution: success
+    final joint tolerance: 0.02 rad
+    GenericSystem in real path: no
 
-The final Week 7 ROS workspace acceptance result is:
+The ROS-to-MuJoCo joint correspondence is defined by:
 
-```text
-102 tests
-0 errors
-0 failures
-11 skipped
-```
+    robot_description/panda_joint_mapping.json
 
-Detailed MuJoCo ros2_control hardware and Week 7 bringup documentation is
-available in:
+Cross-model forward kinematics validates:
 
-```text
-docs/mujoco_hardware.md
-```
+    panda_link7 <-> link7
+    panda_hand  <-> hand
 
-The Week 6 deterministic configuration, randomization, policy API, seeded
-evaluation, and 100-episode reproducibility results remain part of the
-completed project foundation.
+with documented translation and rotation tolerances of `1e-6`.
 
-Work intentionally deferred to Week 8 includes:
+The integrated MoveIt-to-MuJoCo launch workflow is:
 
-- joint-trajectory-controller command execution in MuJoCo
-- MoveIt execution through the real MuJoCo hardware path
-- URDF-to-MJCF mapping validation
-- cross-model forward-kinematics validation
-- planning-scene integration
+    ros2_ws/src/robustlearn_moveit_config/launch/moveit_mujoco.launch.py
+
+The main end-to-end execution acceptance test is:
+
+    ros2_ws/src/robustlearn_moveit_config/test/test_moveit_mujoco_execution_launch.py
+
+The complete Week 8 acceptance command is:
+
+    ./tools/run_week8_acceptance.sh
+
+The validated final ROS workspace acceptance result is:
+
+    5 packages finished
+    118 tests
+    0 errors
+    0 failures
+    12 skipped
+
+The complete acceptance workflow reports:
+
+    WEEK 8 ACCEPTANCE: PASS
+    MoveIt trajectory executes in MuJoCo.
+
+Detailed Week 8 documentation is available in:
+
+    docs/panda_joint_mapping.md
+    docs/cross_model_fk_validation.md
+    docs/moveit_mujoco_execution.md
+    docs/week8_acceptance.md
+
+The deterministic simulation, insertion-task, policy-interface, seeded
+evaluation, and Week 7 MuJoCo hardware foundations remain part of the completed
+project base.
+
+Work beyond the Week 8 boundary includes:
+
+- classical insertion expert benchmarking
+- demonstration collection
+- Behaviour Cloning
+- DAgger
+- SAC
+- learned-policy deployment
+- large-scale robustness evaluation
+- ONNX deployment
+- physical-hardware deployment
 
 ## Development Environment
 
