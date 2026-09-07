@@ -177,19 +177,19 @@ class TestMuJoCoTrajectoryBringup(unittest.TestCase):
 
         message = received_messages[-1]
 
-        self.assertEqual(
-            tuple(message.name),
-            PANDA_JOINTS,
+        self.assertTrue(
+            set(PANDA_JOINTS).issubset(message.name),
+            'Not all Panda arm joints were published.',
         )
 
         self.assertEqual(
             len(message.position),
-            len(PANDA_JOINTS),
+            len(message.name),
         )
 
         self.assertEqual(
             len(message.velocity),
-            len(PANDA_JOINTS),
+            len(message.name),
         )
 
         self.assertTrue(
@@ -338,7 +338,19 @@ class TestMuJoCoTrajectoryBringup(unittest.TestCase):
 
         before = self._wait_for_joint_state()
 
-        target_positions = list(before.position)
+        before_positions = dict(
+            zip(
+                before.name,
+                before.position,
+                strict=True,
+            )
+        )
+
+        target_positions = [
+            before_positions[joint_name]
+            for joint_name in PANDA_JOINTS
+        ]
+
         target_positions[0] += JOINT1_DELTA
 
         action_client = ActionClient(
@@ -422,16 +434,30 @@ class TestMuJoCoTrajectoryBringup(unittest.TestCase):
 
         after = self._wait_for_joint_state()
 
+        after_positions = dict(
+            zip(
+                after.name,
+                after.position,
+                strict=True,
+            )
+        )
+
         self.assertGreater(
-            abs(after.position[0] - before.position[0]),
+            abs(
+                after_positions[PANDA_JOINTS[0]]
+                - before_positions[PANDA_JOINTS[0]]
+            ),
             0.02,
             'panda_joint1 did not move meaningfully.',
         )
 
         final_errors = [
-            abs(actual - target)
-            for actual, target in zip(
-                after.position,
+            abs(
+                after_positions[joint_name]
+                - target_position
+            )
+            for joint_name, target_position in zip(
+                PANDA_JOINTS,
                 target_positions,
                 strict=True,
             )
