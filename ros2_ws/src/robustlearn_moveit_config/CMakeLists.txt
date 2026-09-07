@@ -19,6 +19,12 @@ if(BUILD_TESTING)
     test/test_week3_acceptance_launch.py
     TIMEOUT 60
   )
+
+  add_launch_test(
+    test/test_moveit_mujoco_execution_launch.py
+    TIMEOUT 90
+  )
+
 endif()
 
 ament_package()
