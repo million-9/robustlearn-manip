@@ -130,6 +130,7 @@ message(
   STATUS
   "RobustLearn MuJoCo root: ${ROBUSTLEARN_MUJOCO_ROOT}"
 )
+
 message(
   STATUS
   "RobustLearn MuJoCo library: ${MUJOCO_LIBRARY}"
@@ -244,6 +245,12 @@ if(BUILD_TESTING)
 
   ament_lint_auto_find_test_dependencies()
 
+  get_filename_component(
+    ROBUSTLEARN_REPOSITORY_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
+    ABSOLUTE
+  )
+
   ament_add_gtest(
     test_mujoco_system_plugin
     test/test_mujoco_system_plugin.cpp
@@ -253,12 +260,6 @@ if(BUILD_TESTING)
     test_mujoco_system_plugin
     ${PROJECT_NAME}
     MuJoCo::mujoco
-  )
-
-  get_filename_component(
-    ROBUSTLEARN_REPOSITORY_ROOT
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
-    ABSOLUTE
   )
 
   target_compile_definitions(
@@ -271,6 +272,29 @@ if(BUILD_TESTING)
     test_mujoco_system_plugin
     hardware_interface
     pluginlib
+    rclcpp
+  )
+
+  ament_add_gtest(
+    test_mujoco_wrist_ft
+    test/test_mujoco_wrist_ft.cpp
+  )
+
+  target_link_libraries(
+    test_mujoco_wrist_ft
+    ${PROJECT_NAME}
+    MuJoCo::mujoco
+  )
+
+  target_compile_definitions(
+    test_mujoco_wrist_ft
+    PRIVATE
+      ROBUSTLEARN_TEST_MODEL_PATH="${ROBUSTLEARN_REPOSITORY_ROOT}/robot_description/mjcf/insertion/panda_insertion.xml"
+  )
+
+  ament_target_dependencies(
+    test_mujoco_wrist_ft
+    hardware_interface
     rclcpp
   )
 

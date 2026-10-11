@@ -82,11 +82,25 @@ def generate_launch_description():
         output='screen',
     )
 
+    wrist_ft_broadcaster_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'wrist_ft_broadcaster',
+            '--controller-manager',
+            '/controller_manager',
+            '--controller-ros-args',
+            '-r ~/wrench:=/wrist_ft/wrench',
+        ],
+        output='screen',
+    )
+
     return LaunchDescription(
         [
             model_path_argument,
             robot_state_publisher,
             controller_manager,
             joint_state_broadcaster_spawner,
+            wrist_ft_broadcaster_spawner,
         ]
     )
