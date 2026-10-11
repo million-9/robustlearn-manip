@@ -30,7 +30,6 @@ import pytest
 import rclpy
 import sensor_msgs.msg
 
-
 # Isolate this launch test from other controller_manager instances that
 # may be started concurrently by colcon test.
 os.environ['ROS_DOMAIN_ID'] = '163'
