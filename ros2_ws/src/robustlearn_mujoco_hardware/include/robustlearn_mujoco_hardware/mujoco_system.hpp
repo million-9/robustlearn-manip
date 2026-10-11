@@ -86,9 +86,19 @@ private:
   std::array<int, 7> dof_addresses_{};
   std::array<int, 7> actuator_ids_{};
 
+  int wrist_force_sensor_id_{-1};
+  int wrist_force_sensor_address_{-1};
+  int wrist_torque_sensor_id_{-1};
+  int wrist_torque_sensor_address_{-1};
+
+  bool wrist_ft_state_interfaces_available_{false};
+
   std::array<double, 7> joint_positions_{};
   std::array<double, 7> joint_velocities_{};
   std::array<double, 7> joint_commands_{};
+
+  std::array<double, 3> wrist_force_{};
+  std::array<double, 3> wrist_torque_{};
 };
 
 }  // namespace robustlearn_mujoco_hardware

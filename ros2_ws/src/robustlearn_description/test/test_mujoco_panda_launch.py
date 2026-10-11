@@ -20,6 +20,7 @@ import unittest
 
 import ament_index_python.packages
 import controller_manager_msgs.srv
+import geometry_msgs.msg
 import launch
 import launch.actions
 import launch.launch_description_sources
@@ -39,15 +40,28 @@ PANDA_JOINTS = tuple(
     for index in range(1, 8)
 )
 
+WRIST_FT_INTERFACES = (
+    'wrist_ft/force.x',
+    'wrist_ft/force.y',
+    'wrist_ft/force.z',
+    'wrist_ft/torque.x',
+    'wrist_ft/torque.y',
+    'wrist_ft/torque.z',
+)
+
 
 @pytest.mark.launch_test
 def generate_test_description():
     package_share = pathlib.Path(
-        ament_index_python.packages.get_package_share_directory('robustlearn_description')
+        ament_index_python.packages.get_package_share_directory(
+            'robustlearn_description'
+        )
     )
 
     launch_file = (
-        package_share / 'launch' / 'mujoco_panda.launch.py'
+        package_share
+        / 'launch'
+        / 'mujoco_panda.launch.py'
     )
 
     repository_root = pathlib.Path(__file__).resolve().parents[4]
@@ -65,7 +79,9 @@ def generate_test_description():
         )
 
     mujoco_bringup = launch.actions.IncludeLaunchDescription(
-        launch.launch_description_sources.PythonLaunchDescriptionSource(str(launch_file)),
+        launch.launch_description_sources.PythonLaunchDescriptionSource(
+            str(launch_file)
+        ),
         launch_arguments={
             'model_path': str(model_path),
         }.items(),
@@ -128,6 +144,72 @@ class TestMuJoCoPandaBringup(unittest.TestCase):
 
         return result
 
+    def _wait_for_joint_state(self):
+        received_messages = []
+
+        def callback(message):
+            received_messages.append(message)
+
+        subscription = self.node.create_subscription(
+            sensor_msgs.msg.JointState,
+            '/joint_states',
+            callback,
+            10,
+        )
+
+        deadline = time.monotonic() + 5.0
+
+        while (
+            time.monotonic() < deadline
+            and not received_messages
+        ):
+            rclpy.spin_once(
+                self.node,
+                timeout_sec=0.1,
+            )
+
+        self.node.destroy_subscription(subscription)
+
+        self.assertTrue(
+            received_messages,
+            'No /joint_states message was received.',
+        )
+
+        return received_messages[-1]
+
+    def _wait_for_wrist_wrench(self):
+        received_messages = []
+
+        def callback(message):
+            received_messages.append(message)
+
+        subscription = self.node.create_subscription(
+            geometry_msgs.msg.WrenchStamped,
+            '/wrist_ft/wrench',
+            callback,
+            10,
+        )
+
+        deadline = time.monotonic() + 5.0
+
+        while (
+            time.monotonic() < deadline
+            and not received_messages
+        ):
+            rclpy.spin_once(
+                self.node,
+                timeout_sec=0.1,
+            )
+
+        self.node.destroy_subscription(subscription)
+
+        self.assertTrue(
+            received_messages,
+            'No /wrist_ft/wrench message was received.',
+        )
+
+        return received_messages[-1]
+
     def test_mujoco_hardware_acceptance(self):
         hardware_deadline = time.monotonic() + 10.0
         panda_system = None
@@ -189,7 +271,7 @@ class TestMuJoCoPandaBringup(unittest.TestCase):
         )
 
         controller_deadline = time.monotonic() + 10.0
-        broadcaster = None
+        controllers = {}
         last_controller_states = []
 
         while time.monotonic() < controller_deadline:
@@ -198,85 +280,104 @@ class TestMuJoCoPandaBringup(unittest.TestCase):
                 '/controller_manager/list_controllers',
             )
 
+            controllers = {
+                controller.name: controller
+                for controller in controller_response.controller
+            }
+
             last_controller_states = [
                 f'{controller.name}:{controller.state}'
                 for controller in controller_response.controller
             ]
 
-            broadcasters = [
-                controller
-                for controller in controller_response.controller
-                if controller.name == 'joint_state_broadcaster'
-            ]
+            joint_state_broadcaster = controllers.get(
+                'joint_state_broadcaster'
+            )
+            wrist_ft_broadcaster = controllers.get(
+                'wrist_ft_broadcaster'
+            )
 
             if (
-                len(broadcasters) == 1
-                and broadcasters[0].state == 'active'
+                joint_state_broadcaster
+                and wrist_ft_broadcaster
+                and joint_state_broadcaster.state == 'active'
+                and wrist_ft_broadcaster.state == 'active'
             ):
-                broadcaster = broadcasters[0]
                 break
 
             time.sleep(0.1)
 
-        self.assertIsNotNone(
-            broadcaster,
+        self.assertIn(
+            'joint_state_broadcaster',
+            controllers,
             (
-                'joint_state_broadcaster did not become active. '
+                'joint_state_broadcaster was not loaded. '
                 f'Last controller states: {last_controller_states}'
             ),
         )
 
-        received_messages = []
-
-        def callback(message):
-            received_messages.append(message)
-
-        subscription = self.node.create_subscription(
-            sensor_msgs.msg.JointState,
-            '/joint_states',
-            callback,
-            10,
+        self.assertIn(
+            'wrist_ft_broadcaster',
+            controllers,
+            (
+                'wrist_ft_broadcaster was not loaded. '
+                f'Last controller states: {last_controller_states}'
+            ),
         )
-
-        deadline = time.monotonic() + 5.0
-
-        while (
-            time.monotonic() < deadline
-            and not received_messages
-        ):
-            rclpy.spin_once(
-                self.node,
-                timeout_sec=0.1,
-            )
-
-        self.node.destroy_subscription(subscription)
-
-        self.assertTrue(
-            received_messages,
-            'No /joint_states message was received.',
-        )
-
-        message = received_messages[-1]
 
         self.assertEqual(
-            set(message.name),
+            controllers['joint_state_broadcaster'].state,
+            'active',
+        )
+
+        self.assertEqual(
+            controllers['wrist_ft_broadcaster'].state,
+            'active',
+        )
+
+        interface_response = self._call_service(
+            controller_manager_msgs.srv.ListHardwareInterfaces,
+            '/controller_manager/list_hardware_interfaces',
+        )
+
+        state_interfaces = {
+            interface.name: interface
+            for interface in interface_response.state_interfaces
+        }
+
+        for interface_name in WRIST_FT_INTERFACES:
+            self.assertIn(
+                interface_name,
+                state_interfaces,
+                f'Missing wrist F/T state interface: {interface_name}',
+            )
+
+            self.assertTrue(
+                state_interfaces[interface_name].is_available,
+                f'Wrist F/T state interface unavailable: {interface_name}',
+            )
+
+        joint_state = self._wait_for_joint_state()
+
+        self.assertEqual(
+            set(joint_state.name),
             set(PANDA_JOINTS),
         )
 
         self.assertEqual(
-            len(message.position),
+            len(joint_state.position),
             len(PANDA_JOINTS),
         )
 
         self.assertEqual(
-            len(message.velocity),
+            len(joint_state.velocity),
             len(PANDA_JOINTS),
         )
 
         self.assertTrue(
             all(
                 math.isfinite(value)
-                for value in message.position
+                for value in joint_state.position
             ),
             'One or more Panda positions are non-finite.',
         )
@@ -284,7 +385,34 @@ class TestMuJoCoPandaBringup(unittest.TestCase):
         self.assertTrue(
             all(
                 math.isfinite(value)
-                for value in message.velocity
+                for value in joint_state.velocity
             ),
             'One or more Panda velocities are non-finite.',
+        )
+
+        wrench = self._wait_for_wrist_wrench()
+
+        self.assertEqual(
+            wrench.header.frame_id,
+            'panda_wrist_ft',
+        )
+
+        wrench_values = (
+            wrench.wrench.force.x,
+            wrench.wrench.force.y,
+            wrench.wrench.force.z,
+            wrench.wrench.torque.x,
+            wrench.wrench.torque.y,
+            wrench.wrench.torque.z,
+        )
+
+        self.assertTrue(
+            all(
+                math.isfinite(value)
+                for value in wrench_values
+            ),
+            (
+                'One or more wrist force/torque values are non-finite: '
+                f'{wrench_values}'
+            ),
         )

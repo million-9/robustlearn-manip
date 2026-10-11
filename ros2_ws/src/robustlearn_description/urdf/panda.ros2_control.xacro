@@ -72,6 +72,18 @@
         <state_interface name="velocity"/>
       </joint>
 
+      <xacro:if
+        value="${hardware_plugin == 'robustlearn_mujoco_hardware/MuJoCoSystem'}">
+        <sensor name="wrist_ft">
+          <state_interface name="force.x"/>
+          <state_interface name="force.y"/>
+          <state_interface name="force.z"/>
+          <state_interface name="torque.x"/>
+          <state_interface name="torque.y"/>
+          <state_interface name="torque.z"/>
+        </sensor>
+      </xacro:if>
+
     </ros2_control>
 
   </xacro:macro>

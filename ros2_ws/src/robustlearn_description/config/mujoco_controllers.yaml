@@ -4,3 +4,11 @@ controller_manager:
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
+
+    wrist_ft_broadcaster:
+      type: force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster
+
+wrist_ft_broadcaster:
+  ros__parameters:
+    sensor_name: wrist_ft
+    frame_id: panda_wrist_ft
