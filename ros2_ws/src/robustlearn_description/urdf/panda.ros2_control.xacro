@@ -4,7 +4,7 @@
 
   <xacro:macro
     name="panda_ros2_control"
-    params="name hardware_plugin model_path">
+    params="name hardware_plugin model_path initial_keyframe">
 
     <ros2_control name="${name}" type="system">
 
@@ -13,6 +13,10 @@
 
         <xacro:if value="${model_path != ''}">
           <param name="model_path">${model_path}</param>
+        </xacro:if>
+
+        <xacro:if value="${initial_keyframe != ''}">
+          <param name="initial_keyframe">${initial_keyframe}</param>
         </xacro:if>
       </hardware>
 

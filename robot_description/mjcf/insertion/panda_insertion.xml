@@ -38,4 +38,18 @@
       prefix=""
     />
   </worldbody>
+
+  <keyframe>
+    <!--
+      Week 9 global-approach start. The seven arm values reuse the
+      collision-free target already exercised by the Week 8 MoveIt
+      execution acceptance path. Finger and gripper controls match the
+      vendored Panda home keyframe.
+    -->
+    <key
+      name="week9_approach"
+      qpos="0.10 -0.10 0.10 -1.70 0.10 1.70 -0.70 0.04 0.04"
+      ctrl="0.10 -0.10 0.10 -1.70 0.10 1.70 -0.70 255"
+    />
+  </keyframe>
 </mujoco>

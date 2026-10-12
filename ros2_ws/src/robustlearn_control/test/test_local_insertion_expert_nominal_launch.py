@@ -14,7 +14,13 @@ import pytest
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import (
+    DurabilityPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 
 
 PANDA_JOINT_NAMES = [
@@ -27,6 +33,7 @@ PANDA_JOINT_NAMES = [
     'panda_joint7',
 ]
 
+
 CANONICAL_PRE_INSERTION_JOINT_POSITIONS = [
     0.0,
     0.013358,
@@ -36,6 +43,11 @@ CANONICAL_PRE_INSERTION_JOINT_POSITIONS = [
     1.568475,
     -0.785300,
 ]
+
+
+EXPECTED_SUCCESS_STATUS = (
+    'success|canonical insertion task reached success'
+)
 
 
 @pytest.mark.launch_test
@@ -119,6 +131,19 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
             10,
         )
 
+        status_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
+        cls.status_subscription = cls.node.create_subscription(
+            String,
+            '/local_insertion_expert/status',
+            cls.status_callback,
+            status_qos,
+        )
+
         cls.state_lock = threading.Lock()
 
         cls.current_joint_positions = list(
@@ -130,6 +155,7 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
         )
 
         cls.received_goal_positions = []
+        cls.status_history = []
 
         cls.action_server = ActionServer(
             cls.node,
@@ -159,6 +185,10 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
 
         cls.action_server.destroy()
 
+        cls.node.destroy_subscription(
+            cls.status_subscription
+        )
+
         cls.executor.shutdown()
 
         cls.executor_thread.join(
@@ -177,6 +207,16 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
     @staticmethod
     def cancel_callback(_goal_handle):
         return CancelResponse.ACCEPT
+
+    @classmethod
+    def status_callback(
+        cls,
+        message: String,
+    ):
+        with cls.state_lock:
+            cls.status_history.append(
+                message.data
+            )
 
     @classmethod
     def execute_goal(cls, goal_handle):
@@ -265,6 +305,7 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
         joint_state.name = list(
             PANDA_JOINT_NAMES
         )
+
         joint_state.position = joint_positions
         joint_state.velocity = [
             0.0
@@ -288,11 +329,30 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
         controller_state.joint_names = list(
             PANDA_JOINT_NAMES
         )
+
         controller_state.output.positions = controller_command
 
         cls.controller_state_publisher.publish(
             controller_state
         )
+
+    @classmethod
+    def wait_for_status(
+        cls,
+        expected_status: str,
+        timeout_sec: float,
+    ) -> bool:
+        deadline = time.monotonic() + timeout_sec
+
+        while time.monotonic() < deadline:
+            with cls.state_lock:
+                if expected_status in cls.status_history:
+                    return True
+
+            time.sleep(0.01)
+
+        with cls.state_lock:
+            return expected_status in cls.status_history
 
     def test_nominal_insertion_changes_feedback_and_succeeds(
         self,
@@ -306,6 +366,17 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
             timeout=8.0,
         )
 
+        self.assertTrue(
+            self.wait_for_status(
+                EXPECTED_SUCCESS_STATUS,
+                timeout_sec=2.0,
+            ),
+            (
+                'Local insertion expert did not publish terminal success '
+                f'status; history={self.status_history}'
+            ),
+        )
+
         with self.state_lock:
             goals = [
                 list(goal)
@@ -314,6 +385,10 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
 
             final_positions = list(
                 self.current_joint_positions
+            )
+
+            statuses = list(
+                self.status_history
             )
 
         self.assertGreater(
@@ -329,6 +404,24 @@ class TestLocalInsertionExpertNominal(unittest.TestCase):
                 for value in goal
             ),
             'Trajectory goals must contain only finite values',
+        )
+
+        self.assertIn(
+            'running',
+            statuses,
+            (
+                'Expected running status before terminal success; '
+                f'history={statuses}'
+            ),
+        )
+
+        self.assertIn(
+            EXPECTED_SUCCESS_STATUS,
+            statuses,
+            (
+                'Expected terminal success status; '
+                f'history={statuses}'
+            ),
         )
 
         maximum_feedback_change = max(

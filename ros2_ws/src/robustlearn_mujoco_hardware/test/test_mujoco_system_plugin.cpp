@@ -96,6 +96,19 @@ public:
   {
     return system.model_->opt.timestep;
   }
+
+  static std::array<double, 7> joint_positions(
+    const MuJoCoSystem & system)
+  {
+    return system.joint_positions_;
+  }
+
+  static std::array<double, 7> joint_commands(
+    const MuJoCoSystem & system)
+  {
+    return system.joint_commands_;
+  }
+
 };
 
 }  // namespace robustlearn_mujoco_hardware
@@ -299,6 +312,110 @@ TEST(MuJoCoSystemInitializationTest, valid_panda_description_initializes)
   EXPECT_EQ(
     initialize(make_valid_hardware_info()),
     hardware_interface::CallbackReturn::SUCCESS);
+}
+
+
+TEST(MuJoCoSystemInitializationTest, default_initial_keyframe_is_home)
+{
+  robustlearn_mujoco_hardware::MuJoCoSystem system;
+
+  const auto result =
+    system.init(
+    make_component_params(
+      make_valid_hardware_info()));
+
+  ASSERT_EQ(
+    result,
+    hardware_interface::CallbackReturn::SUCCESS);
+
+  const std::array<double, 7> expected_positions = {
+    0.0,
+    0.0,
+    0.0,
+    -1.57079,
+    0.0,
+    1.57079,
+    -0.7853,
+  };
+
+  const auto actual_positions =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    joint_positions(system);
+
+  const auto actual_commands =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    joint_commands(system);
+
+  for (std::size_t index = 0; index < expected_positions.size(); ++index) {
+    EXPECT_DOUBLE_EQ(
+      actual_positions[index],
+      expected_positions[index]);
+
+    EXPECT_DOUBLE_EQ(
+      actual_commands[index],
+      expected_positions[index]);
+  }
+}
+
+TEST(MuJoCoSystemInitializationTest, configured_initial_keyframe_is_used)
+{
+  auto hardware_info =
+    make_valid_hardware_info();
+
+  hardware_info.hardware_parameters["initial_keyframe"] =
+    "week9_approach";
+
+  robustlearn_mujoco_hardware::MuJoCoSystem system;
+
+  const auto result =
+    system.init(
+    make_component_params(
+      std::move(hardware_info)));
+
+  ASSERT_EQ(
+    result,
+    hardware_interface::CallbackReturn::SUCCESS);
+
+  const std::array<double, 7> expected_positions = {
+    0.10,
+    -0.10,
+    0.10,
+    -1.70,
+    0.10,
+    1.70,
+    -0.70,
+  };
+
+  const auto actual_positions =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    joint_positions(system);
+
+  const auto actual_commands =
+    robustlearn_mujoco_hardware::MuJoCoSystemTestPeer::
+    joint_commands(system);
+
+  for (std::size_t index = 0; index < expected_positions.size(); ++index) {
+    EXPECT_DOUBLE_EQ(
+      actual_positions[index],
+      expected_positions[index]);
+
+    EXPECT_DOUBLE_EQ(
+      actual_commands[index],
+      expected_positions[index]);
+  }
+}
+
+TEST(MuJoCoSystemInitializationTest, nonexistent_initial_keyframe_fails)
+{
+  auto hardware_info =
+    make_valid_hardware_info();
+
+  hardware_info.hardware_parameters["initial_keyframe"] =
+    "missing_week9_keyframe";
+
+  EXPECT_EQ(
+    initialize(std::move(hardware_info)),
+    hardware_interface::CallbackReturn::ERROR);
 }
 
 TEST(MuJoCoSystemInitializationTest, missing_model_path_fails)

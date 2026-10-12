@@ -8,6 +8,9 @@ controller_manager:
     panda_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
+    wrist_ft_broadcaster:
+      type: force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster
+
 joint_state_broadcaster:
   ros__parameters:
     extra_joints:
@@ -59,3 +62,8 @@ panda_arm_controller:
       panda_joint7:
         trajectory: 0.05
         goal: 0.01
+
+wrist_ft_broadcaster:
+  ros__parameters:
+    sensor_name: wrist_ft
+    frame_id: panda_wrist_ft

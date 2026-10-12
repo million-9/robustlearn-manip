@@ -4,6 +4,12 @@ project(robustlearn_moveit_config)
 find_package(ament_cmake REQUIRED)
 
 install(
+  PROGRAMS
+    scripts/hybrid_insertion_coordinator.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
   DIRECTORY
     launch
   DESTINATION share/${PROJECT_NAME}
@@ -25,6 +31,20 @@ if(BUILD_TESTING)
     TIMEOUT 90
   )
 
+  add_launch_test(
+    test/test_hybrid_moveit_readiness_timeout_launch.py
+    TIMEOUT 20
+  )
+
+  add_launch_test(
+    test/test_hybrid_insertion_e2e_launch.py
+    TIMEOUT 90
+  )
+
+  add_launch_test(
+    test/test_hybrid_coordinator_failures_launch.py
+    TIMEOUT 30
+  )
 endif()
 
 ament_package()
