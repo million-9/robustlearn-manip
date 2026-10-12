@@ -479,6 +479,34 @@ class TestHybridCoordinatorFailures(unittest.TestCase):
         return result
 
     @classmethod
+    def _wait_for_joint_state_subscriber(
+        cls,
+        scenario: str,
+        timeout_sec: float = 5.0,
+    ) -> bool:
+        deadline = (
+            time.monotonic()
+            + timeout_sec
+        )
+
+        publisher = cls.publishers[
+            scenario
+        ]
+
+        while time.monotonic() < deadline:
+            if publisher.get_subscription_count() > 0:
+                return True
+
+            time.sleep(
+                0.02
+            )
+
+        return (
+            publisher.get_subscription_count()
+            > 0
+        )
+
+    @classmethod
     def _publish_joint_state(
         cls,
         scenario: str,
@@ -514,20 +542,30 @@ class TestHybridCoordinatorFailures(unittest.TestCase):
             message
         )
 
-    @classmethod
     def _publish_for_duration(
-        cls,
+        self,
         scenario: str,
         positions: tuple[float, ...],
         duration_sec: float = 0.75,
     ):
+        self.assertTrue(
+            self._wait_for_joint_state_subscriber(
+                scenario,
+                timeout_sec=5.0,
+            ),
+            (
+                'Coordinator joint-state subscription was not discovered '
+                f'for scenario {scenario!r}.'
+            ),
+        )
+
         deadline = (
             time.monotonic()
             + duration_sec
         )
 
         while time.monotonic() < deadline:
-            cls._publish_joint_state(
+            self._publish_joint_state(
                 scenario,
                 positions,
             )
