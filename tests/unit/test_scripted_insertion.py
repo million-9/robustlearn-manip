@@ -21,6 +21,7 @@ from robustlearn.scripted_insertion import (
 from robustlearn.sim.control import (
     current_control_targets,
     panda_arm_actuator_ids,
+    panda_site_spatial_jacobian,
 )
 
 
@@ -386,3 +387,149 @@ def test_scripted_insertion_reaches_success_deterministically() -> None:
         assert np.all(np.isfinite(wrist_force))
 
         assert np.all(np.isfinite(wrist_torque))
+
+
+def test_classical_expert_joint_targets_returns_seven_finite_targets() -> None:
+    env = PandaInsertionEnv()
+    env.reset(seed=2026)
+
+    expert = ClassicalInsertionExpert()
+
+    simulation = env.simulation
+    snapshot = simulation.snapshot()
+
+    site_positions = {
+        name: position
+        for name, position in zip(
+            ("peg_tip", "receptacle_center", "insertion_axis", "pre_insertion"),
+            snapshot.task_site_xpos,
+            strict=True,
+        )
+    }
+
+    arm_ids = panda_arm_actuator_ids(simulation.model)
+
+    current = np.asarray(
+        [
+            simulation.data.ctrl[actuator_index]
+            for actuator_index in arm_ids
+        ],
+        dtype=np.float64,
+    )
+
+    targets = expert.joint_targets(
+        current_joint_targets=current,
+        peg_tip_position=site_positions["peg_tip"],
+        receptacle_center_position=site_positions["receptacle_center"],
+        insertion_axis_position=site_positions["insertion_axis"],
+        peg_tip_jacobian=panda_site_spatial_jacobian(
+            simulation.model,
+            simulation.data,
+            "peg_tip",
+        ),
+        success_insertion_depth_m=env.config.success_insertion_depth_m,
+    )
+
+    assert targets.shape == (7,)
+    assert np.all(np.isfinite(targets))
+
+    np.testing.assert_array_less(
+        np.abs(targets - current),
+        np.full(7, expert.config.max_joint_step_rad + 1.0e-12),
+    )
+
+
+def test_classical_expert_joint_targets_is_deterministic() -> None:
+    env = PandaInsertionEnv()
+    env.reset(seed=2026)
+
+    simulation = env.simulation
+    snapshot = simulation.snapshot()
+
+    site_positions = {
+        name: position
+        for name, position in zip(
+            ("peg_tip", "receptacle_center", "insertion_axis", "pre_insertion"),
+            snapshot.task_site_xpos,
+            strict=True,
+        )
+    }
+
+    arm_ids = panda_arm_actuator_ids(simulation.model)
+
+    current = np.asarray(
+        [
+            simulation.data.ctrl[actuator_index]
+            for actuator_index in arm_ids
+        ],
+        dtype=np.float64,
+    )
+
+    jacobian = panda_site_spatial_jacobian(
+        simulation.model,
+        simulation.data,
+        "peg_tip",
+    )
+
+    first = ClassicalInsertionExpert().joint_targets(
+        current_joint_targets=current,
+        peg_tip_position=site_positions["peg_tip"],
+        receptacle_center_position=site_positions["receptacle_center"],
+        insertion_axis_position=site_positions["insertion_axis"],
+        peg_tip_jacobian=jacobian,
+        success_insertion_depth_m=env.config.success_insertion_depth_m,
+    )
+
+    second = ClassicalInsertionExpert().joint_targets(
+        current_joint_targets=current,
+        peg_tip_position=site_positions["peg_tip"],
+        receptacle_center_position=site_positions["receptacle_center"],
+        insertion_axis_position=site_positions["insertion_axis"],
+        peg_tip_jacobian=jacobian,
+        success_insertion_depth_m=env.config.success_insertion_depth_m,
+    )
+
+    np.testing.assert_array_equal(first, second)
+
+
+def test_classical_expert_joint_targets_rejects_non_finite_input() -> None:
+    expert = ClassicalInsertionExpert()
+
+    current = np.zeros(7, dtype=np.float64)
+
+    peg_tip = np.zeros(3, dtype=np.float64)
+    peg_tip[0] = np.nan
+
+    with pytest.raises(ValueError):
+        expert.joint_targets(
+            current_joint_targets=current,
+            peg_tip_position=peg_tip,
+            receptacle_center_position=np.zeros(3, dtype=np.float64),
+            insertion_axis_position=np.asarray(
+                [0.0, 0.0, 1.0],
+                dtype=np.float64,
+            ),
+            peg_tip_jacobian=np.zeros((6, 7), dtype=np.float64),
+            success_insertion_depth_m=0.01,
+        )
+
+    assert expert.phase is InsertionPhase.ABORT
+
+
+def test_classical_expert_joint_targets_rejects_invalid_shapes() -> None:
+    expert = ClassicalInsertionExpert()
+
+    with pytest.raises(ValueError):
+        expert.joint_targets(
+            current_joint_targets=np.zeros(6, dtype=np.float64),
+            peg_tip_position=np.zeros(3, dtype=np.float64),
+            receptacle_center_position=np.zeros(3, dtype=np.float64),
+            insertion_axis_position=np.asarray(
+                [0.0, 0.0, 1.0],
+                dtype=np.float64,
+            ),
+            peg_tip_jacobian=np.zeros((6, 7), dtype=np.float64),
+            success_insertion_depth_m=0.01,
+        )
+
+    assert expert.phase is InsertionPhase.ABORT
