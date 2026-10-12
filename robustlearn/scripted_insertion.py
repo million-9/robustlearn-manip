@@ -6,7 +6,7 @@ from math import isfinite
 
 import gymnasium as gym
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from robustlearn.envs.panda_insertion import PandaInsertionEnv
 from robustlearn.sim.control import (
@@ -17,6 +17,8 @@ from robustlearn.sim.control import (
 from robustlearn.sim.simulation import TASK_SITE_NAMES
 
 FloatArray = NDArray[np.float64]
+
+PANDA_ARM_DOF = 7
 
 
 class InsertionPhase(StrEnum):
@@ -37,6 +39,13 @@ class ClassicalInsertionExpertConfig:
     max_joint_step_rad: float = 0.03
     alignment_tolerance_m: float = 0.0005
 
+    # Conservative contact limits for the local insertion controller.
+    #
+    # The force supplied to ``joint_targets`` must be expressed in the same
+    # world/task frame as the insertion geometry.
+    max_axial_force_n: float = 10.0
+    max_lateral_force_n: float = 5.0
+
     def __post_init__(self) -> None:
         """Validate finite, positive expert tuning parameters."""
         values = {
@@ -44,6 +53,8 @@ class ClassicalInsertionExpertConfig:
             "damping": self.damping,
             "max_joint_step_rad": self.max_joint_step_rad,
             "alignment_tolerance_m": self.alignment_tolerance_m,
+            "max_axial_force_n": self.max_axial_force_n,
+            "max_lateral_force_n": self.max_lateral_force_n,
         }
 
         for name, value in values.items():
@@ -94,51 +105,224 @@ class ClassicalInsertionExpert:
 
         return self.phase
 
-    def action(self, env: PandaInsertionEnv) -> FloatArray:
-        """Return one deterministic bounded expert action."""
-        simulation = env.simulation
-        snapshot = simulation.snapshot()
+    def joint_targets(
+        self,
+        *,
+        current_joint_targets: ArrayLike,
+        peg_tip_position: ArrayLike,
+        receptacle_center_position: ArrayLike,
+        insertion_axis_position: ArrayLike,
+        peg_tip_jacobian: ArrayLike,
+        success_insertion_depth_m: float,
+        wrist_force_world_n: ArrayLike | None = None,
+        failed: bool = False,
+    ) -> FloatArray:
+        """Return bounded seven-joint targets from explicit insertion state.
 
-        site_positions = {
-            name: position
-            for name, position in zip(
-                TASK_SITE_NAMES,
-                snapshot.task_site_xpos,
-                strict=True,
+        This method contains the environment-independent expert control law.
+        Callers provide the current seven Panda joint targets, task geometry,
+        and the 6x7 peg-tip spatial Jacobian.
+
+        ``wrist_force_world_n`` must be expressed in the same coordinate frame
+        as the task positions. When omitted, zero contact force is assumed.
+
+        Excessive axial contact stops insertion progression for the current
+        control step. Excessive lateral contact is treated as unsafe and moves
+        the expert into the ABORT phase.
+
+        The method performs no simulation stepping and does not access MuJoCo
+        actuator state directly. This makes it suitable for both the existing
+        simulation adapter and ROS-side execution using externally observed
+        robot state.
+        """
+        current = np.asarray(
+            current_joint_targets,
+            dtype=np.float64,
+        )
+
+        peg_tip = np.asarray(
+            peg_tip_position,
+            dtype=np.float64,
+        )
+
+        receptacle_center = np.asarray(
+            receptacle_center_position,
+            dtype=np.float64,
+        )
+
+        insertion_axis = np.asarray(
+            insertion_axis_position,
+            dtype=np.float64,
+        )
+
+        jacobian = np.asarray(
+            peg_tip_jacobian,
+            dtype=np.float64,
+        )
+
+        wrist_force = (
+            np.zeros(
+                3,
+                dtype=np.float64,
             )
+            if wrist_force_world_n is None
+            else np.asarray(
+                wrist_force_world_n,
+                dtype=np.float64,
+            )
+        )
+
+        if current.shape != (PANDA_ARM_DOF,):
+            self.phase = InsertionPhase.ABORT
+            raise ValueError(
+                "current_joint_targets must have shape "
+                f"({PANDA_ARM_DOF},); got {current.shape}"
+            )
+
+        positions = {
+            "peg_tip_position": peg_tip,
+            "receptacle_center_position": receptacle_center,
+            "insertion_axis_position": insertion_axis,
         }
 
-        peg_tip = site_positions["peg_tip"]
-        receptacle_center = site_positions["receptacle_center"]
-        insertion_axis = site_positions["insertion_axis"]
+        for name, position in positions.items():
+            if position.shape != (3,):
+                self.phase = InsertionPhase.ABORT
+                raise ValueError(
+                    f"{name} must have shape (3,); got {position.shape}"
+                )
+
+        if jacobian.shape != (6, PANDA_ARM_DOF):
+            self.phase = InsertionPhase.ABORT
+            raise ValueError(
+                "peg_tip_jacobian must have shape "
+                f"(6, {PANDA_ARM_DOF}); got {jacobian.shape}"
+            )
+
+        if wrist_force.shape != (3,):
+            self.phase = InsertionPhase.ABORT
+            raise ValueError(
+                "wrist_force_world_n must have shape "
+                f"(3,); got {wrist_force.shape}"
+            )
+
+        scalar_values = np.asarray(
+            [success_insertion_depth_m],
+            dtype=np.float64,
+        )
+
+        finite_inputs = (
+            np.all(np.isfinite(current))
+            and all(
+                np.all(np.isfinite(position))
+                for position in positions.values()
+            )
+            and np.all(np.isfinite(jacobian))
+            and np.all(np.isfinite(wrist_force))
+            and np.all(np.isfinite(scalar_values))
+        )
+
+        if not finite_inputs:
+            self.phase = InsertionPhase.ABORT
+            raise ValueError(
+                "classical insertion expert inputs must contain only "
+                "finite values"
+            )
+
+        if success_insertion_depth_m <= 0.0:
+            self.phase = InsertionPhase.ABORT
+            raise ValueError(
+                "success_insertion_depth_m must be positive"
+            )
 
         axis_vector = insertion_axis - receptacle_center
         axis_norm = float(np.linalg.norm(axis_vector))
 
         if axis_norm <= np.finfo(np.float64).eps:
             self.phase = InsertionPhase.ABORT
-            raise RuntimeError("Insertion axis must differ from receptacle center")
+            raise RuntimeError(
+                "Insertion axis must differ from receptacle center"
+            )
 
         axis_direction = axis_vector / axis_norm
 
         delta = peg_tip - receptacle_center
-        axial_offset = float(np.dot(delta, axis_direction))
+        axial_offset = float(
+            np.dot(
+                delta,
+                axis_direction,
+            )
+        )
 
-        lateral_vector = delta - axial_offset * axis_direction
+        lateral_vector = (
+            delta
+            - axial_offset * axis_direction
+        )
 
         insertion_depth = -axial_offset
-        lateral_error = float(np.linalg.norm(lateral_vector))
+        lateral_error = float(
+            np.linalg.norm(lateral_vector)
+        )
+
+        signed_axial_force = float(
+            np.dot(
+                wrist_force,
+                axis_direction,
+            )
+        )
+
+        axial_force = abs(signed_axial_force)
+
+        lateral_force_vector = (
+            wrist_force
+            - signed_axial_force * axis_direction
+        )
+
+        lateral_force = float(
+            np.linalg.norm(
+                lateral_force_vector
+            )
+        )
+
+        if lateral_force >= self.config.max_lateral_force_n:
+            self.update_phase(
+                lateral_error_m=lateral_error,
+                insertion_depth_m=insertion_depth,
+                success_insertion_depth_m=success_insertion_depth_m,
+                failed=True,
+            )
+
+            raise RuntimeError(
+                "Classical insertion expert aborted because lateral "
+                f"contact force {lateral_force:.6f} N reached the "
+                f"configured limit {self.config.max_lateral_force_n:.6f} N"
+            )
 
         phase = self.update_phase(
             lateral_error_m=lateral_error,
             insertion_depth_m=insertion_depth,
-            success_insertion_depth_m=env.config.success_insertion_depth_m,
+            success_insertion_depth_m=success_insertion_depth_m,
+            failed=failed,
         )
 
         if phase is InsertionPhase.ABORT:
-            raise RuntimeError("Classical insertion expert entered abort phase")
+            raise RuntimeError(
+                "Classical insertion expert entered abort phase"
+            )
 
-        remaining_depth = env.config.success_insertion_depth_m - insertion_depth
+        # Excessive axial force prevents further insertion progression.
+        # Returning the current targets gives the controller an explicit hold
+        # command without introducing a separate task-success state.
+        if (
+            phase is InsertionPhase.INSERT
+            and axial_force >= self.config.max_axial_force_n
+        ):
+            return current.copy()
+
+        remaining_depth = (
+            success_insertion_depth_m
+            - insertion_depth
+        )
 
         axial_step = 0.0
         lateral_correction = np.zeros(
@@ -153,7 +337,11 @@ class ClassicalInsertionExpert:
                     lateral_error,
                 )
 
-                lateral_correction = -lateral_vector * correction_magnitude / lateral_error
+                lateral_correction = (
+                    -lateral_vector
+                    * correction_magnitude
+                    / lateral_error
+                )
 
         elif phase is InsertionPhase.INSERT:
             axial_step = max(
@@ -164,12 +352,9 @@ class ClassicalInsertionExpert:
                 ),
             )
 
-        desired_translation = -axial_step * axis_direction + lateral_correction
-
-        jacobian = panda_site_spatial_jacobian(
-            simulation.model,
-            simulation.data,
-            "peg_tip",
+        desired_translation = (
+            -axial_step * axis_direction
+            + lateral_correction
         )
 
         desired_twist = np.concatenate(
@@ -182,15 +367,28 @@ class ClassicalInsertionExpert:
             )
         )
 
-        regularized = jacobian @ jacobian.T + (self.config.damping**2) * np.eye(
-            6,
-            dtype=np.float64,
+        regularized = (
+            jacobian @ jacobian.T
+            + (self.config.damping**2)
+            * np.eye(
+                6,
+                dtype=np.float64,
+            )
         )
 
-        joint_delta = jacobian.T @ np.linalg.solve(
-            regularized,
-            desired_twist,
-        )
+        try:
+            joint_delta = (
+                jacobian.T
+                @ np.linalg.solve(
+                    regularized,
+                    desired_twist,
+                )
+            )
+        except np.linalg.LinAlgError as exc:
+            self.phase = InsertionPhase.ABORT
+            raise RuntimeError(
+                "Classical insertion expert Jacobian solve failed"
+            ) from exc
 
         joint_delta = np.clip(
             joint_delta,
@@ -198,18 +396,72 @@ class ClassicalInsertionExpert:
             self.config.max_joint_step_rad,
         )
 
-        action = current_control_targets(simulation.data)
+        targets = current + joint_delta
 
-        arm_actuator_ids = panda_arm_actuator_ids(simulation.model)
+        if not np.all(np.isfinite(targets)):
+            self.phase = InsertionPhase.ABORT
+            raise RuntimeError(
+                "Classical insertion expert produced non-finite "
+                "joint targets"
+            )
 
-        arm_targets = (
-            action[
-                np.asarray(
-                    arm_actuator_ids,
-                    dtype=np.int64,
-                )
-            ]
-            + joint_delta
+        return np.asarray(
+            targets,
+            dtype=np.float64,
+        )
+
+    def action(self, env: PandaInsertionEnv) -> FloatArray:
+        """Return one deterministic bounded environment action."""
+        simulation = env.simulation
+        snapshot = simulation.snapshot()
+
+        site_positions = {
+            name: position
+            for name, position in zip(
+                TASK_SITE_NAMES,
+                snapshot.task_site_xpos,
+                strict=True,
+            )
+        }
+
+        action = current_control_targets(
+            simulation.data
+        )
+
+        arm_actuator_ids = panda_arm_actuator_ids(
+            simulation.model
+        )
+
+        current_arm_targets = np.asarray(
+            [
+                action[actuator_index]
+                for actuator_index in arm_actuator_ids
+            ],
+            dtype=np.float64,
+        )
+
+        task_status = simulation.task_status(
+            config=env.config
+        )
+
+        arm_targets = self.joint_targets(
+            current_joint_targets=current_arm_targets,
+            peg_tip_position=site_positions["peg_tip"],
+            receptacle_center_position=(
+                site_positions["receptacle_center"]
+            ),
+            insertion_axis_position=(
+                site_positions["insertion_axis"]
+            ),
+            peg_tip_jacobian=panda_site_spatial_jacobian(
+                simulation.model,
+                simulation.data,
+                "peg_tip",
+            ),
+            success_insertion_depth_m=(
+                env.config.success_insertion_depth_m
+            ),
+            failed=task_status.failure,
         )
 
         for actuator_index, target in zip(
@@ -223,7 +475,10 @@ class ClassicalInsertionExpert:
             env.action_space,
             gym.spaces.Box,
         ):
-            raise RuntimeError("Panda insertion action space must be a Box")
+            self.phase = InsertionPhase.ABORT
+            raise RuntimeError(
+                "Panda insertion action space must be a Box"
+            )
 
         action = np.clip(
             action,
@@ -239,7 +494,9 @@ class ClassicalInsertionExpert:
 
         if not np.all(np.isfinite(action)):
             self.phase = InsertionPhase.ABORT
-            raise RuntimeError("Classical insertion expert produced a non-finite action")
+            raise RuntimeError(
+                "Classical insertion expert produced a non-finite action"
+            )
 
         return np.asarray(
             action,
@@ -292,7 +549,9 @@ def run_scripted_insertion(
     expert = ClassicalInsertionExpert()
 
     if not np.all(np.isfinite(observation)):
-        raise RuntimeError("Scripted insertion reset produced a non-finite observation")
+        raise RuntimeError(
+            "Scripted insertion reset produced a non-finite observation"
+        )
 
     diagnostics: list[dict[str, object]] = []
 
@@ -303,7 +562,9 @@ def run_scripted_insertion(
         action = expert.action(env)
 
         if not np.all(np.isfinite(action)):
-            raise RuntimeError("Scripted insertion produced a non-finite action")
+            raise RuntimeError(
+                "Scripted insertion produced a non-finite action"
+            )
 
         (
             observation,
@@ -314,7 +575,9 @@ def run_scripted_insertion(
         ) = env.step(action)
 
         if not np.all(np.isfinite(observation)):
-            raise RuntimeError("Scripted insertion produced a non-finite observation")
+            raise RuntimeError(
+                "Scripted insertion produced a non-finite observation"
+            )
 
         sensors = env.simulation.sensor_snapshot()
 

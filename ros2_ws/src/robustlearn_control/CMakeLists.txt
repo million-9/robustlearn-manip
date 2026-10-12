@@ -86,6 +86,12 @@ install(
 )
 
 install(
+  PROGRAMS
+    scripts/local_insertion_expert.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
   DIRECTORY
     config
     launch
@@ -115,6 +121,16 @@ if(BUILD_TESTING)
 
   add_launch_test(
     test/test_status_publisher_launch.py
+    TIMEOUT 10
+  )
+
+  add_launch_test(
+    test/test_local_insertion_expert_timeout_launch.py
+    TIMEOUT 10
+  )
+
+  add_launch_test(
+    test/test_local_insertion_expert_nominal_launch.py
     TIMEOUT 10
   )
 endif()
