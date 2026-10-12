@@ -15,6 +15,10 @@
     name="model_path"
     default=""/>
 
+  <xacro:arg
+    name="initial_keyframe"
+    default="home"/>
+
   <!-- Base -->
   <link name="panda_link0"/>
 
@@ -113,6 +117,7 @@
   <xacro:panda_ros2_control
     name="PandaSystem"
     hardware_plugin="$(arg hardware_plugin)"
-    model_path="$(arg model_path)"/>
+    model_path="$(arg model_path)"
+    initial_keyframe="$(arg initial_keyframe)"/>
 
 </robot>

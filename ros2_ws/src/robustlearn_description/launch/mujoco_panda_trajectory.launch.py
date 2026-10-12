@@ -39,7 +39,16 @@ def generate_launch_description():
         ),
     )
 
+    initial_keyframe_argument = DeclareLaunchArgument(
+        'initial_keyframe',
+        default_value='home',
+        description=(
+            'MuJoCo keyframe used to initialize the hardware simulation.'
+        ),
+    )
+
     model_path = LaunchConfiguration('model_path')
+    initial_keyframe = LaunchConfiguration('initial_keyframe')
 
     robot_description = {
         'robot_description': Command(
@@ -50,6 +59,8 @@ def generate_launch_description():
                 'MuJoCoSystem',
                 ' model_path:=',
                 model_path,
+                ' initial_keyframe:=',
+                initial_keyframe,
             ]
         )
     }
@@ -84,11 +95,26 @@ def generate_launch_description():
         output='screen',
     )
 
+    wrist_ft_broadcaster_spawner = Node(
+        package='controller_manager',
+        executable='spawner',
+        arguments=[
+            'wrist_ft_broadcaster',
+            '--controller-manager',
+            '/controller_manager',
+            '--controller-ros-args',
+            '-r ~/wrench:=/wrist_ft/wrench',
+        ],
+        output='screen',
+    )
+
     return LaunchDescription(
         [
             model_path_argument,
+            initial_keyframe_argument,
             robot_state_publisher,
             controller_manager,
             controllers_spawner,
+            wrist_ft_broadcaster_spawner,
         ]
     )

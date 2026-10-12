@@ -13,7 +13,14 @@ import pytest
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import (
+    DurabilityPolicy,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
+
 
 PANDA_JOINT_NAMES = [
     'panda_joint1',
@@ -25,6 +32,7 @@ PANDA_JOINT_NAMES = [
     'panda_joint7',
 ]
 
+
 CANONICAL_PRE_INSERTION_JOINT_POSITIONS = [
     0.0,
     0.013358,
@@ -34,6 +42,11 @@ CANONICAL_PRE_INSERTION_JOINT_POSITIONS = [
     1.568475,
     -0.785300,
 ]
+
+
+EXPECTED_FAILURE_STATUS = (
+    'failed|trajectory goal exceeded 0.250 s timeout'
+)
 
 
 @pytest.mark.launch_test
@@ -117,6 +130,22 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
             10,
         )
 
+        status_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
+        cls.status_lock = threading.Lock()
+        cls.status_history = []
+
+        cls.status_subscription = cls.node.create_subscription(
+            String,
+            '/local_insertion_expert/status',
+            cls.status_callback,
+            status_qos,
+        )
+
         cls.action_server = ActionServer(
             cls.node,
             FollowJointTrajectory,
@@ -129,6 +158,10 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.action_server.destroy()
+
+        cls.node.destroy_subscription(
+            cls.status_subscription
+        )
 
         cls.executor.shutdown()
 
@@ -148,6 +181,16 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
     @staticmethod
     def cancel_callback(_goal_handle):
         return CancelResponse.ACCEPT
+
+    @classmethod
+    def status_callback(
+        cls,
+        message: String,
+    ):
+        with cls.status_lock:
+            cls.status_history.append(
+                message.data
+            )
 
     @staticmethod
     def execute_goal(goal_handle):
@@ -176,6 +219,50 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
         return result
 
     @classmethod
+    def wait_for_feedback_subscribers(
+        cls,
+        timeout_sec: float,
+    ) -> bool:
+        deadline = (
+            time.monotonic()
+            + timeout_sec
+        )
+
+        while time.monotonic() < deadline:
+            joint_state_ready = (
+                cls.joint_state_publisher.get_subscription_count()
+                > 0
+            )
+
+            wrench_ready = (
+                cls.wrench_publisher.get_subscription_count()
+                > 0
+            )
+
+            controller_state_ready = (
+                cls.controller_state_publisher.get_subscription_count()
+                > 0
+            )
+
+            if (
+                joint_state_ready
+                and wrench_ready
+                and controller_state_ready
+            ):
+                return True
+
+            time.sleep(0.02)
+
+        return (
+            cls.joint_state_publisher.get_subscription_count() > 0
+            and cls.wrench_publisher.get_subscription_count() > 0
+            and (
+                cls.controller_state_publisher.get_subscription_count()
+                > 0
+            )
+        )
+
+    @classmethod
     def publish_valid_feedback(cls):
         now = cls.node.get_clock().now().to_msg()
 
@@ -184,9 +271,11 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
         joint_state.name = list(
             PANDA_JOINT_NAMES
         )
+
         joint_state.position = list(
             CANONICAL_PRE_INSERTION_JOINT_POSITIONS
         )
+
         joint_state.velocity = [
             0.0
             for _ in PANDA_JOINT_NAMES
@@ -209,6 +298,7 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
         controller_state.joint_names = list(
             PANDA_JOINT_NAMES
         )
+
         controller_state.output.positions = list(
             CANONICAL_PRE_INSERTION_JOINT_POSITIONS
         )
@@ -217,11 +307,45 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
             controller_state
         )
 
+    @classmethod
+    def wait_for_status(
+        cls,
+        expected_status: str,
+        timeout_sec: float,
+    ) -> bool:
+        deadline = time.monotonic() + timeout_sec
+
+        while time.monotonic() < deadline:
+            with cls.status_lock:
+                if expected_status in cls.status_history:
+                    return True
+
+            time.sleep(0.01)
+
+        with cls.status_lock:
+            return expected_status in cls.status_history
+
     def test_trajectory_goal_timeout_aborts(
         self,
         proc_output,
         local_expert,
     ):
+        self.assertTrue(
+            self.wait_for_feedback_subscribers(
+                timeout_sec=10.0,
+            ),
+            (
+                'Local insertion expert feedback subscriptions were not '
+                'discovered before the test deadline; '
+                'joint_state_subscribers='
+                f'{self.joint_state_publisher.get_subscription_count()}, '
+                'wrench_subscribers='
+                f'{self.wrench_publisher.get_subscription_count()}, '
+                'controller_state_subscribers='
+                f'{self.controller_state_publisher.get_subscription_count()}'
+            ),
+        )
+
         publish_deadline = (
             time.monotonic()
             + 2.0
@@ -236,4 +360,38 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
             'trajectory goal exceeded 0.250 s timeout',
             process=local_expert,
             timeout=5.0,
+        )
+
+        self.assertTrue(
+            self.wait_for_status(
+                EXPECTED_FAILURE_STATUS,
+                timeout_sec=2.0,
+            ),
+            (
+                'Local insertion expert did not publish terminal failure '
+                f'status; history={self.status_history}'
+            ),
+        )
+
+        with self.status_lock:
+            statuses = list(
+                self.status_history
+            )
+
+        self.assertIn(
+            'running',
+            statuses,
+            (
+                'Expected running status before timeout failure; '
+                f'history={statuses}'
+            ),
+        )
+
+        self.assertIn(
+            EXPECTED_FAILURE_STATUS,
+            statuses,
+            (
+                'Expected terminal timeout failure status; '
+                f'history={statuses}'
+            ),
         )

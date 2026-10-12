@@ -16,7 +16,12 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import (
+    DurabilityPolicy,
+    qos_profile_sensor_data,
+    QoSProfile,
+    ReliabilityPolicy,
+)
 from robustlearn.config import PandaInsertionTaskConfig
 from robustlearn.scripted_insertion import (
     ClassicalInsertionExpert,
@@ -26,9 +31,13 @@ from robustlearn.sim.control import panda_site_spatial_jacobian
 from robustlearn.sim.insertion import load_insertion_model
 from robustlearn.sim.task import evaluate_insertion_task
 import sensor_msgs.msg
+from std_msgs.msg import String
+from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectoryPoint
 
+
 FloatArray = NDArray[np.float64]
+
 
 ROS_PANDA_ARM_JOINT_NAMES: tuple[str, ...] = (
     'panda_joint1',
@@ -40,6 +49,7 @@ ROS_PANDA_ARM_JOINT_NAMES: tuple[str, ...] = (
     'panda_joint7',
 )
 
+
 MUJOCO_PANDA_ARM_JOINT_NAMES: tuple[str, ...] = (
     'joint1',
     'joint2',
@@ -50,18 +60,32 @@ MUJOCO_PANDA_ARM_JOINT_NAMES: tuple[str, ...] = (
     'joint7',
 )
 
+
 PEG_TIP_SITE_NAME = 'peg_tip'
 RECEPTACLE_CENTER_SITE_NAME = 'receptacle_center'
 INSERTION_AXIS_SITE_NAME = 'insertion_axis'
 WRIST_FT_SITE_NAME = 'panda_wrist_ft'
 
+
 FOLLOW_JOINT_TRAJECTORY_ACTION = (
     '/panda_arm_controller/follow_joint_trajectory'
 )
 
+
 CONTROLLER_STATE_TOPIC = (
     '/panda_arm_controller/controller_state'
 )
+
+
+STATUS_TOPIC = (
+    '/local_insertion_expert/status'
+)
+
+
+STATUS_DISARMED = 'disarmed'
+STATUS_RUNNING = 'running'
+STATUS_SUCCESS = 'success'
+STATUS_FAILED = 'failed'
 
 
 @dataclass(frozen=True)
@@ -255,6 +279,11 @@ class LocalInsertionExpertNode(Node):
         )
 
         self.declare_parameter(
+            'start_armed',
+            True,
+        )
+
+        self.declare_parameter(
             'control_period_s',
             0.02,
         )
@@ -272,6 +301,12 @@ class LocalInsertionExpertNode(Node):
         self._command_enabled = bool(
             self.get_parameter(
                 'command_enabled'
+            ).value
+        )
+
+        self._armed = bool(
+            self.get_parameter(
+                'start_armed'
             ).value
         )
 
@@ -321,6 +356,18 @@ class LocalInsertionExpertNode(Node):
         self._terminal = False
         self._terminal_reason: str | None = None
 
+        status_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+
+        self._status_publisher = self.create_publisher(
+            String,
+            STATUS_TOPIC,
+            status_qos,
+        )
+
         self._trajectory_client = ActionClient(
             self,
             FollowJointTrajectory,
@@ -348,6 +395,12 @@ class LocalInsertionExpertNode(Node):
             qos_profile_sensor_data,
         )
 
+        self._set_armed_service = self.create_service(
+            SetBool,
+            '~/set_armed',
+            self._set_armed_callback,
+        )
+
         self._timer = self.create_timer(
             self._control_period_s,
             self._control_tick,
@@ -359,11 +412,90 @@ class LocalInsertionExpertNode(Node):
             else 'preview'
         )
 
+        arm_state = (
+            'armed'
+            if self._armed
+            else 'disarmed'
+        )
+
+        if self._armed:
+            self._publish_status(
+                STATUS_RUNNING
+            )
+        else:
+            self._publish_status(
+                STATUS_DISARMED
+            )
+
         self.get_logger().info(
             'Local insertion expert started in '
-            f'{mode} mode; waiting for joint, controller, '
+            f'{mode} mode ({arm_state}); waiting for joint, controller, '
             'and wrist F/T feedback'
         )
+
+    def _publish_status(
+        self,
+        state: str,
+        reason: str | None = None,
+    ) -> None:
+        message = String()
+
+        if reason is None:
+            message.data = state
+        else:
+            message.data = (
+                f'{state}|{reason}'
+            )
+
+        self._status_publisher.publish(
+            message
+        )
+
+    def _set_armed_callback(
+        self,
+        request: SetBool.Request,
+        response: SetBool.Response,
+    ) -> SetBool.Response:
+        requested_armed = bool(request.data)
+
+        if self._terminal:
+            response.success = False
+            response.message = (
+                'local insertion expert is already terminal: '
+                f'{self._terminal_reason}'
+            )
+            return response
+
+        if not requested_armed and self._goal_in_flight:
+            response.success = False
+            response.message = (
+                'cannot disarm local insertion expert while a '
+                'trajectory goal is in flight'
+            )
+            return response
+
+        self._armed = requested_armed
+
+        if self._armed:
+            response.message = 'local insertion expert armed'
+
+            self._publish_status(
+                STATUS_RUNNING
+            )
+        else:
+            response.message = 'local insertion expert disarmed'
+
+            self._publish_status(
+                STATUS_DISARMED
+            )
+
+        response.success = True
+
+        self.get_logger().info(
+            response.message
+        )
+
+        return response
 
     def _joint_state_callback(
         self,
@@ -478,6 +610,11 @@ class LocalInsertionExpertNode(Node):
         self._terminal_reason = reason
         self._expert.phase = InsertionPhase.ABORT
 
+        self._publish_status(
+            STATUS_FAILED,
+            reason,
+        )
+
         self.get_logger().error(
             f'Local insertion expert aborted: {reason}'
         )
@@ -497,6 +634,11 @@ class LocalInsertionExpertNode(Node):
 
         self._terminal = True
         self._terminal_reason = reason
+
+        self._publish_status(
+            STATUS_SUCCESS,
+            reason,
+        )
 
         self.get_logger().info(
             f'Local insertion expert completed: {reason}'
@@ -653,6 +795,9 @@ class LocalInsertionExpertNode(Node):
 
     def _control_tick(self) -> None:
         if self._terminal:
+            return
+
+        if not self._armed:
             return
 
         if self._goal_timed_out():

@@ -133,6 +133,17 @@ if(BUILD_TESTING)
     test/test_local_insertion_expert_nominal_launch.py
     TIMEOUT 10
   )
+
+  add_launch_test(
+    test/test_local_insertion_expert_arming_launch.py
+    TIMEOUT 10
+  )
+
+  add_launch_test(
+    test/test_local_insertion_expert_force_abort_launch.py
+    TIMEOUT 10
+  )
+
 endif()
 
 ament_package()

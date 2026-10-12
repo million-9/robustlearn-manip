@@ -33,6 +33,14 @@ def generate_launch_description():
         ),
     )
 
+    initial_keyframe_argument = DeclareLaunchArgument(
+        'initial_keyframe',
+        default_value='home',
+        description=(
+            'MuJoCo keyframe used to initialize the hardware simulation.'
+        ),
+    )
+
     use_rviz_argument = DeclareLaunchArgument(
         'use_rviz',
         default_value='false',
@@ -79,6 +87,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'model_path': LaunchConfiguration('model_path'),
+            'initial_keyframe': LaunchConfiguration('initial_keyframe'),
         }.items(),
     )
 
@@ -151,6 +160,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             model_path_argument,
+            initial_keyframe_argument,
             use_rviz_argument,
             mujoco_bringup,
             static_tf,

@@ -503,20 +503,49 @@ hardware_interface::CallbackReturn MuJoCoSystem::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
-  const int home_keyframe_id =
+  std::string initial_keyframe =
+    "home";
+
+  bool initial_keyframe_explicit =
+    false;
+
+  const auto initial_keyframe_it =
+    hardware_info.hardware_parameters.find(
+    "initial_keyframe");
+
+  if (
+    initial_keyframe_it !=
+    hardware_info.hardware_parameters.end() &&
+    !initial_keyframe_it->second.empty())
+  {
+    initial_keyframe =
+      initial_keyframe_it->second;
+
+    initial_keyframe_explicit =
+      true;
+  }
+
+  const int initial_keyframe_id =
     mj_name2id(
     compiled_model.get(),
     mjOBJ_KEY,
-    "home");
+    initial_keyframe.c_str());
 
   if (
-    home_keyframe_id >=
+    initial_keyframe_id >=
     0)
   {
     mj_resetDataKeyframe(
       compiled_model.get(),
       data.get(),
-      home_keyframe_id);
+      initial_keyframe_id);
+  } else if (initial_keyframe_explicit) {
+    RCLCPP_ERROR(
+      logger,
+      "Configured MuJoCo initial keyframe '%s' does not exist",
+      initial_keyframe.c_str());
+
+    return hardware_interface::CallbackReturn::ERROR;
   }
 
   mj_forward(
