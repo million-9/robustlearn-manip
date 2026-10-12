@@ -219,6 +219,50 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
         return result
 
     @classmethod
+    def wait_for_feedback_subscribers(
+        cls,
+        timeout_sec: float,
+    ) -> bool:
+        deadline = (
+            time.monotonic()
+            + timeout_sec
+        )
+
+        while time.monotonic() < deadline:
+            joint_state_ready = (
+                cls.joint_state_publisher.get_subscription_count()
+                > 0
+            )
+
+            wrench_ready = (
+                cls.wrench_publisher.get_subscription_count()
+                > 0
+            )
+
+            controller_state_ready = (
+                cls.controller_state_publisher.get_subscription_count()
+                > 0
+            )
+
+            if (
+                joint_state_ready
+                and wrench_ready
+                and controller_state_ready
+            ):
+                return True
+
+            time.sleep(0.02)
+
+        return (
+            cls.joint_state_publisher.get_subscription_count() > 0
+            and cls.wrench_publisher.get_subscription_count() > 0
+            and (
+                cls.controller_state_publisher.get_subscription_count()
+                > 0
+            )
+        )
+
+    @classmethod
     def publish_valid_feedback(cls):
         now = cls.node.get_clock().now().to_msg()
 
@@ -286,6 +330,22 @@ class TestLocalInsertionExpertTimeout(unittest.TestCase):
         proc_output,
         local_expert,
     ):
+        self.assertTrue(
+            self.wait_for_feedback_subscribers(
+                timeout_sec=10.0,
+            ),
+            (
+                'Local insertion expert feedback subscriptions were not '
+                'discovered before the test deadline; '
+                'joint_state_subscribers='
+                f'{self.joint_state_publisher.get_subscription_count()}, '
+                'wrench_subscribers='
+                f'{self.wrench_publisher.get_subscription_count()}, '
+                'controller_state_subscribers='
+                f'{self.controller_state_publisher.get_subscription_count()}'
+            ),
+        )
+
         publish_deadline = (
             time.monotonic()
             + 2.0
