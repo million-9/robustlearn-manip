@@ -87,6 +87,7 @@ install(
 
 install(
   PROGRAMS
+    scripts/keyboard_teleop.py
     scripts/local_insertion_expert.py
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -141,6 +142,11 @@ if(BUILD_TESTING)
 
   add_launch_test(
     test/test_local_insertion_expert_force_abort_launch.py
+    TIMEOUT 10
+  )
+
+  add_launch_test(
+    test/test_keyboard_teleop_launch.py
     TIMEOUT 10
   )
 

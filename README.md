@@ -1147,6 +1147,98 @@ The same file can be read and validated with:
 Serialization uses deterministic JSON formatting so identical supplied episode
 records produce identical file contents.
 
+## Week 10 Keyboard Teleoperation
+
+Week 10 adds a project-owned manual teleoperation path for the Panda insertion
+task.
+
+The implementation is split between:
+
+    robustlearn/teleop.py
+    ros2_ws/src/robustlearn_control/scripts/keyboard_teleop.py
+
+`robustlearn/teleop.py` contains the ROS-independent input mapping and safety
+logic. The ROS 2 node consumes joint-state and wrist force/torque feedback and
+routes all motion commands through:
+
+    /panda_arm_controller/follow_joint_trajectory
+
+The teleoperation path therefore uses the existing `ros2_control`
+`JointTrajectoryController`. It does not write MuJoCo actuator values directly.
+
+The current interface uses bounded joint-space jogging for all seven Panda arm
+joints:
+
+    q / a    panda_joint1 + / -
+    w / s    panda_joint2 + / -
+    e / d    panda_joint3 + / -
+    r / f    panda_joint4 + / -
+    t / g    panda_joint5 + / -
+    y / h    panda_joint6 + / -
+    u / j    panda_joint7 + / -
+
+Additional controls are:
+
+    SPACE    refresh deadman/enable lease
+    x        stop teleoperation progression
+    Esc      abort teleoperation
+
+The terminal interface uses a refresh-based deadman rather than relying on key
+release events. By default the operator must refresh the deadman within
+`0.25 s`. If the lease expires, command progression stops and an active
+trajectory goal is cancelled.
+
+The default safety configuration is:
+
+    joint_step_rad = 0.01
+    deadman_timeout_s = 0.25
+    min_command_period_s = 0.05
+
+Each requested joint delta is bounded to the configured step size, the
+resulting target is clamped to the Panda URDF joint limits, and non-finite
+joint state or command data is rejected. The command-rate limiter prevents
+jogs from being issued faster than the configured minimum command period.
+
+The teleoperation node also reports operator-relevant status including the
+task identifier, teleoperation source, deadman state, joint-state readiness,
+wrist force norm, wrist torque norm, and local-expert status when available.
+
+Teleoperation runs identify their data source as:
+
+    source = teleop
+
+This keeps manual trajectories distinguishable from scripted expert rollouts
+for the Week 11 dataset-collection workflow.
+
+The node normally reads directly from an interactive terminal:
+
+    source /opt/ros/jazzy/setup.bash
+    source ros2_ws/install/setup.bash
+
+    uv run ros2 run robustlearn_control keyboard_teleop.py
+
+For automated integration tests and future external input frontends, terminal
+input can be disabled and single-character commands supplied through a ROS 2
+`std_msgs/String` topic:
+
+    -p use_terminal_input:=false
+    -p input_topic:=/keyboard_teleop/input
+
+This injected input path obeys the same deadman, rate-limit, command-bound, and
+joint-limit checks as terminal input.
+
+The Week 10 implementation has been validated against both a fake
+`FollowJointTrajectory` action server and the project-owned MuJoCo-backed
+`ros2_control` Panda trajectory controller. The real-controller smoke test
+confirmed that a teleoperation jog was accepted through
+`panda_arm_controller` and that deadman expiry stopped further teleoperation
+progression.
+
+Gamepad support is intentionally optional in Week 10. No compatible gamepad
+has been validated for this project yet, so the current implementation exposes
+the keyboard interface and reusable input/safety layer without adding an
+untested device-specific gamepad backend.
+
 ### Week 11 Demonstration Collection
 
 Week 11 collection will build on this writer rather than defining another

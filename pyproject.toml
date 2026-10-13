@@ -31,7 +31,9 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
+"ros2_ws/src/robustlearn_control/scripts/keyboard_teleop.py" = ["I001"]
 "ros2_ws/src/robustlearn_control/scripts/local_insertion_expert.py" = ["I001"]
+"ros2_ws/src/robustlearn_control/test/test_keyboard_teleop_launch.py" = ["I001"]
 "ros2_ws/src/robustlearn_control/test/test_local_insertion_expert_nominal_launch.py" = ["I001"]
 "ros2_ws/src/robustlearn_control/test/test_local_insertion_expert_timeout_launch.py" = ["I001"]
 "ros2_ws/src/robustlearn_control/test/test_local_insertion_expert_arming_launch.py" = ["I001"]
