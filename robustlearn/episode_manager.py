@@ -354,7 +354,7 @@ class Week9HybridBackend:
         """Defer reset to the fresh Week 9 launch-test process."""
         return None
 
-    def _domain_id(self, spec: EpisodeSpec) -> int:
+    def domain_id(self, spec: EpisodeSpec) -> int:
         """Return the reusable ROS domain assigned to this sequential episode."""
         return (
             self._base_domain_id
@@ -367,7 +367,7 @@ class Week9HybridBackend:
 
         result = run_scenario(
             spec.scenario,
-            domain_id=self._domain_id(spec),
+            domain_id=self.domain_id(spec),
             timeout_s=spec.timeout_s,
         )
 

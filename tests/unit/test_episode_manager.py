@@ -640,8 +640,8 @@ def test_week9_backend_domain_assignment_is_deterministic() -> None:
         timeout_s=60.0,
     )
 
-    assert backend._domain_id(first) == 190
-    assert backend._domain_id(wrapped) == 190
+    assert backend.domain_id(first) == 190
+    assert backend.domain_id(wrapped) == 190
 
 
 def test_week9_backend_rejects_invalid_domain_pool() -> None:
