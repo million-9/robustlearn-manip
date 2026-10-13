@@ -58,31 +58,31 @@ PANDA_ARM_JOINT_NAMES: tuple[str, ...] = (
 )
 
 
-# Project-owned measured pre-insertion contract. This is the configuration
-# from which the local insertion expert has been validated to start safely.
+# Project-owned measured staging/handoff contract. This is the settled
+# configuration from which the local insertion expert starts safely.
 PRE_INSERTION_MEASURED_JOINT_POSITIONS: tuple[float, ...] = (
-    0.0,
-    0.013358,
-    -0.000005,
-    -1.583575,
-    -0.000669,
-    1.568475,
-    -0.785300,
+    -0.000154117003526,
+    0.028393605524688,
+    0.000674241873063,
+    -1.513153749958756,
+    0.000042615824978,
+    1.512449322659168,
+    -0.784579660416053,
 )
 
 
 # MuJoCo position-control equilibrium is offset from the commanded trajectory
 # target under load. These command positions apply the measured first-order
 # compensation so that the physical joint state settles near the project-owned
-# measured pre-insertion contract above.
+# measured staging/handoff contract above.
 PRE_INSERTION_COMMAND_JOINT_POSITIONS: tuple[float, ...] = (
-    -0.0009080421759644523,
-    0.006943047572395109,
-    0.00020979908022258667,
-    -1.578042725295331,
-    -0.0000265037733280852,
-    1.5696296944064593,
-    -0.7854804248365594,
+    -0.000906580138929,
+    0.022495664431674,
+    0.000211126909362,
+    -1.506700694310150,
+    -0.000029802001695,
+    1.513840280027956,
+    -0.785479298665236,
 )
 
 
@@ -711,10 +711,11 @@ class HybridInsertionCoordinator(Node):
         request = GetMotionPlan.Request()
         motion_request = request.motion_plan_request
         motion_request.group_name = 'panda_arm'
-        motion_request.num_planning_attempts = 5
+        motion_request.planner_id = 'RRTConnectkConfigDefault'
+        motion_request.num_planning_attempts = 1
         motion_request.allowed_planning_time = 5.0
-        motion_request.max_velocity_scaling_factor = 0.2
-        motion_request.max_acceleration_scaling_factor = 0.2
+        motion_request.max_velocity_scaling_factor = 0.1
+        motion_request.max_acceleration_scaling_factor = 0.1
         motion_request.start_state.joint_state = (
             self._latest_joint_state
         )

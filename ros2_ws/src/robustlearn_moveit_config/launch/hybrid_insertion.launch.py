@@ -37,6 +37,15 @@ def generate_launch_description():
         ),
     )
 
+    initial_keyframe_argument = DeclareLaunchArgument(
+        'initial_keyframe',
+        default_value='week9_approach',
+        description=(
+            'Project-owned MuJoCo keyframe used as the deterministic '
+            'hybrid insertion start configuration.'
+        ),
+    )
+
     use_rviz_argument = DeclareLaunchArgument(
         'use_rviz',
         default_value='false',
@@ -53,7 +62,9 @@ def generate_launch_description():
         ),
         launch_arguments={
             'model_path': LaunchConfiguration('model_path'),
-            'initial_keyframe': 'week9_approach',
+            'initial_keyframe': LaunchConfiguration(
+                'initial_keyframe'
+            ),
             'use_rviz': LaunchConfiguration('use_rviz'),
         }.items(),
     )
@@ -108,6 +119,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             model_path_argument,
+            initial_keyframe_argument,
             use_rviz_argument,
             moveit_mujoco,
             local_expert,

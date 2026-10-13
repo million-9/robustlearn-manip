@@ -32,15 +32,52 @@ The intended system separates global collision-free motion planning from local c
 
 ## Current Status
 
-**Week 8: validated MoveIt 2 trajectory execution through the project-owned MuJoCo ros2_control hardware path.**
+**Week 9: validated the complete hybrid MoveIt 2 + classical local insertion
+expert workflow through the project-owned MuJoCo ros2_control hardware path.**
 
-RobustLearn-Manip now connects MoveIt 2 planning and trajectory execution to
-the real project-owned MuJoCo Panda backend through ros2_control.
+RobustLearn-Manip now implements the intended deployment-oriented manipulation
+architecture:
 
-The Week 8 milestone completes the planning-to-execution infrastructure while
-preserving the existing mock-hardware and direct-controller workflows.
+    MoveIt 2 global approach
+        |
+        v
+    collision-free staging configuration
+        |
+        v
+    measured handoff verification
+        |
+        v
+    phase-based classical local expert
+        |
+        v
+    contact-aware insertion
+        |
+        v
+    task success
 
-Completed through Week 8:
+MoveIt handles global collision-aware motion while the local expert owns the
+fine-alignment and contact-rich insertion phase.
+
+Both global and local control use the same project-owned runtime stack:
+
+    MoveIt 2 / local expert
+            |
+            v
+    panda_arm_controller
+            |
+            v
+    controller_manager
+            |
+            v
+    PandaSystem
+            |
+            v
+    robustlearn_mujoco_hardware/MuJoCoSystem
+            |
+            v
+    MuJoCo Panda
+
+Completed through Week 9:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -80,106 +117,155 @@ Completed through Week 8:
 - MoveIt receives complete finite Panda state from MuJoCo
 - MoveIt-planned trajectories execute through `panda_arm_controller`
 - MuJoCo joint feedback verified to change during MoveIt execution
-- final trajectory state verified within the documented 0.02 rad tolerance
 - exactly one real `PandaSystem` hardware component verified active
 - `mock_components/GenericSystem` verified absent from the real-MuJoCo path
 - existing mock Panda ros2_control bringup preserved
 - existing mock MoveIt demo preserved
 - vendored MuJoCo Menagerie Panda files remain untouched
 - automated Week 8 acceptance runner implemented
+- phase-based deterministic classical insertion expert implemented
+- explicit expert configuration and phase/state model implemented
+- bounded finite local joint commands preserved
+- MuJoCo wrist force/torque exposed through ros2_control
+- six-axis wrist wrench published through `/wrist_ft/wrench`
+- ROS-side classical local insertion expert runner implemented
+- local expert consumes ROS joint-state feedback
+- local expert consumes ROS wrist force/torque feedback
+- local expert commands through `panda_arm_controller`
+- direct MuJoCo actuator bypass avoided in the ROS expert path
+- force-aware local insertion behavior implemented
+- deterministic local-expert timeout and abort behavior implemented
+- hybrid MoveIt-to-local-expert coordinator implemented
+- project-owned planning-scene workcell representation implemented
+- fixed peg represented as an attached planning object
+- deterministic MoveIt staging target implemented
+- measured MuJoCo staging equilibrium characterized
+- explicit measured-state handoff contract implemented
+- strict `0.002 rad` maximum handoff error retained
+- MoveIt global approach and local contact-rich control separated explicitly
+- deterministic planning, execution, handoff, and expert failure paths tested
+- 20-case deterministic Week 9 clean acceptance matrix implemented
+- per-case planning, execution, handoff, task, and force metrics recorded
+- non-finite Week 9 states and metrics rejected
+- project-owned Week 9 acceptance runner implemented
+- Week 9 minimum clean-success gate of 90% exceeded
+- Week 9 target clean-success gate of 95% exceeded
+- final Week 9 result reached 20/20 successful scenarios
+- final Week 9 clean success rate reached 100%
+- complete ROS regression suite passes with zero errors and zero failures
 
-The Week 8 milestone gate is:
+The Week 9 issues were:
 
-    MoveIt trajectory executes successfully in MuJoCo through
-    robustlearn_mujoco_hardware/MuJoCoSystem.
+    #79  Phase-based classical insertion expert
+         COMPLETED
 
-The validated execution architecture is:
+    #80  MuJoCo wrist force/torque through ros2_control
+         COMPLETED
 
-    MoveIt 2
-        |
-        v
-    MoveItSimpleControllerManager
-        |
-        v
-    panda_arm_controller
-        |
-        v
-    controller_manager
-        |
-        v
-    PandaSystem
-        |
-        v
-    robustlearn_mujoco_hardware/MuJoCoSystem
-        |
-        v
-    MuJoCo Panda
+    #81  Classical local expert execution through ros2_control
+         COMPLETED
 
-The real runtime contract includes:
+    #82  MoveIt global approach -> classical expert handoff
+         COMPLETED
+
+    #83  Week 9 deterministic hybrid acceptance workflow
+         COMPLETED
+
+The Week 9 milestone gate is:
+
+    MoveIt global approach
+        PASS
+
+    measured staging handoff
+        PASS
+
+    local classical insertion expert
+        PASS
+
+    final insertion task
+        PASS
+
+    >= 90% clean-scenario success
+        PASS
+
+    >= 95% clean-scenario target
+        PASS
+
+    final deterministic acceptance
+        20 / 20 successful
+        100.0%
+
+The real runtime contract now includes:
 
     hardware component: PandaSystem
     hardware plugin: robustlearn_mujoco_hardware/MuJoCoSystem
     hardware lifecycle: active
     joint_state_broadcaster: active
+    wrist_ft_broadcaster: active
     panda_arm_controller: active
     commanded arm joints: 7
     claimed command interfaces: 7 position interfaces
+    wrist wrench topic: /wrist_ft/wrench
     MoveIt planning: success
     MoveIt execution: success
-    final joint tolerance: 0.02 rad
+    measured handoff tolerance: 0.002 rad
+    local expert execution: success
     GenericSystem in real path: no
 
-The ROS-to-MuJoCo joint correspondence is defined by:
+The hybrid execution workflow is:
 
-    robot_description/panda_joint_mapping.json
+    ros2_ws/src/robustlearn_moveit_config/launch/hybrid_insertion.launch.py
 
-Cross-model forward kinematics validates:
+The Week 9 scenario acceptance test is:
 
-    panda_link7 <-> link7
-    panda_hand  <-> hand
+    ros2_ws/src/robustlearn_moveit_config/test/test_week9_acceptance_scenario_launch.py
 
-with documented translation and rotation tolerances of `1e-6`.
+The complete Week 9 acceptance runner is:
 
-The integrated MoveIt-to-MuJoCo launch workflow is:
+    tools/run_week9_acceptance.py
 
-    ros2_ws/src/robustlearn_moveit_config/launch/moveit_mujoco.launch.py
+The validated final Week 9 acceptance result is:
 
-The main end-to-end execution acceptance test is:
+    WEEK 9 ACCEPTANCE: PASS
 
-    ros2_ws/src/robustlearn_moveit_config/test/test_moveit_mujoco_execution_launch.py
+    Scenarios:       20
+    Successes:       20
+    Failures:         0
+    Success rate:   100.0%
 
-The complete Week 8 acceptance command is:
+    Minimum gate:    PASS
+    Target gate:     PASS
 
-    ./tools/run_week8_acceptance.sh
+The validated final ROS workspace test result is:
 
-The validated final ROS workspace acceptance result is:
-
-    5 packages finished
-    118 tests
+    165 tests
     0 errors
     0 failures
-    12 skipped
+    13 skipped
 
-The complete acceptance workflow reports:
+Detailed Week 9 documentation is available in:
 
-    WEEK 8 ACCEPTANCE: PASS
-    MoveIt trajectory executes in MuJoCo.
+    docs/week9_acceptance.md
 
-Detailed Week 8 documentation is available in:
+The Week 8 execution documentation remains available in:
 
     docs/panda_joint_mapping.md
     docs/cross_model_fk_validation.md
     docs/moveit_mujoco_execution.md
     docs/week8_acceptance.md
 
-The deterministic simulation, insertion-task, policy-interface, seeded
-evaluation, and Week 7 MuJoCo hardware foundations remain part of the completed
-project base.
+The deterministic simulation, task, policy-interface, reproducibility,
+MuJoCo-hardware, and MoveIt execution foundations from earlier milestones remain
+part of the completed project base.
 
-Work beyond the Week 8 boundary includes:
+Work beyond the Week 9 boundary includes:
 
-- classical insertion expert benchmarking
+- formal 200-episode classical expert benchmarking
+- episode-management infrastructure
+- MCAP/rosbag logging
+- dataset writing
 - demonstration collection
+- keyboard/gamepad teleoperation
 - Behaviour Cloning
 - DAgger
 - SAC
