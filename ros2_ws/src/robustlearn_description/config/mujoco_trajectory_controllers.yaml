@@ -54,7 +54,7 @@ panda_arm_controller:
         trajectory: 0.05
         goal: 0.01
       panda_joint5:
-        trajectory: 0.05
+        trajectory: 0.06
         goal: 0.01
       panda_joint6:
         trajectory: 0.05

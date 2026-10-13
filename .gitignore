@@ -6,6 +6,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Build artifacts
+build/
+
 # ROS2 / colcon
 ros2_ws/build/
 ros2_ws/install/
