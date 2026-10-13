@@ -276,6 +276,7 @@ class ShadowWeek9Kinematics:
 
 
 class TestWeek9AcceptanceScenario(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls):
         rclpy.init()
