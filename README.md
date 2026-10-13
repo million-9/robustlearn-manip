@@ -1064,6 +1064,103 @@ MCAP recordings are intended for runtime inspection, debugging, and replay.
 They are separate from the training-dataset representation used by later
 learning workflows.
 
+## Week 10 Structured Expert Rollout Dataset Writer
+
+Expert rollout data has a project-owned, versioned structured schema in:
+
+    robustlearn/rollout_dataset.py
+
+This layer is intentionally separate from MCAP logging.
+
+MCAP records the ROS 2 runtime for debugging and replay. The rollout dataset
+writer stores structured state/action examples intended for later imitation
+learning and dataset collection workflows.
+
+### Episode Schema
+
+Each rollout episode records:
+
+- schema version
+- episode index
+- seed
+- scenario
+- source
+- task
+- success/failure
+- explicit failure reason for failed episodes
+- start and end timestamps
+- git commit
+- configuration identifier
+- an explicitly bounded sequence of frames
+
+One episode is written to one deterministic JSON file:
+
+    episode_<index>__seed_<seed>__<scenario>.json
+
+Failed or incomplete episodes may contain zero frames. They are still written
+with their failure reason rather than being silently dropped.
+
+### Frame Schema
+
+Each frame records:
+
+- frame index
+- timestamp
+- 7 Panda joint positions
+- optional 7 Panda joint velocities
+- task-relative state:
+  - lateral error
+  - axial offset
+  - insertion depth
+- 6-axis wrist wrench:
+  - force x/y/z
+  - torque x/y/z
+- 7-dimensional expert joint-delta action
+- task success flag
+- task failure flag
+- termination flag
+
+All supplied numeric values must be finite, and fixed-size state/action fields
+are shape validated.
+
+Joint velocity is optional because it is available from the simulator sensing
+path but is not yet guaranteed by every live expert rollout path.
+
+### Writer and Reader
+
+A validated episode can be written with:
+
+    from pathlib import Path
+    from robustlearn.rollout_dataset import write_episode
+
+    path = write_episode(
+        Path("build/expert_rollouts"),
+        episode,
+    )
+
+The same file can be read and validated with:
+
+    from robustlearn.rollout_dataset import read_episode
+
+    episode = read_episode(path)
+
+Serialization uses deterministic JSON formatting so identical supplied episode
+records produce identical file contents.
+
+### Week 11 Demonstration Collection
+
+Week 11 collection will build on this writer rather than defining another
+dataset representation.
+
+The collection layer will be responsible for constructing `RolloutFrame`
+records from the live manipulation signals, including joint state, wrist
+wrench, task-relative geometry, and classical expert action, then passing the
+completed episode to this writer.
+
+Dataset v0.1 freezing, train/validation/test splitting, statistics generation,
+and the large demonstration collection campaign remain separate later
+milestones.
+
 ## Continuous Integration
 
 Two GitHub Actions workflows currently validate the repository.
