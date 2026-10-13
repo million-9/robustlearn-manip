@@ -965,6 +965,105 @@ Actions are appropriate for operations such as:
 | Topic | streaming | no direct request feedback | no | no | sensors, status, joint states |
 | Service | request-response | no intermediate feedback | yes | generally no | reset, configure, query |
 | Action | goal-based asynchronous operation | yes | yes | yes | motion, trajectory execution, long-running tasks |
+## Week 10 MCAP Episode Logging
+
+Hybrid manipulation episodes can be wrapped with project-owned ROS 2
+`rosbag2` logging using MCAP storage.
+
+The logging path is implemented in:
+
+    robustlearn/mcap_logging.py
+
+Logging is explicitly enabled or disabled through `McapLoggingConfig`.
+When disabled, the underlying episode backend executes unchanged.
+
+A recorded episode uses the deterministic layout:
+
+    <output_root>/
+      <run_id>/
+        episode_<index>__seed_<seed>__<scenario>/
+          mcap/
+            metadata.yaml
+            mcap_0.mcap
+
+Each recording stores metadata for:
+
+- episode index
+- seed
+- scenario
+- git commit
+- recording timestamp
+- ROS domain ID
+
+The default MCAP topic set is:
+
+    /joint_states
+    /wrist_ft/wrench
+    /local_insertion_expert/status
+    /panda_arm_controller/controller_state
+    /execute_trajectory/_action/feedback
+    /execute_trajectory/_action/status
+    /panda_arm_controller/follow_joint_trajectory/_action/feedback
+    /panda_arm_controller/follow_joint_trajectory/_action/status
+
+The action feedback and status streams are hidden ROS 2 topics, so the recorder
+uses `--include-hidden-topics`.
+
+The recorder is started before episode execution and is shut down in a
+`finally` path so episode failures do not leave the recorder running.
+
+### Inspect a Recording
+
+Set the bag directory:
+
+    BAG_DIR="build/week10_mcap_smoke/smoke_run/episode_000000__seed_0__week9_case_01/mcap"
+
+Inspect its metadata and topic counts:
+
+    ros2 bag info "$BAG_DIR"
+
+List only recorded topic names:
+
+    ros2 bag info -t "$BAG_DIR"
+
+The project validator can also verify that the bag is readable, uses MCAP,
+contains messages, and contains every required topic:
+
+    uv run python -c '
+    from pathlib import Path
+    from robustlearn.mcap_logging import validate_mcap_bag
+    result = validate_mcap_bag(
+        Path(
+            "build/week10_mcap_smoke/"
+            "smoke_run/"
+            "episode_000000__seed_0__week9_case_01/"
+            "mcap"
+        )
+    )
+    print(result)
+    '
+
+### Replay a Recording
+
+Source ROS 2 and the workspace before replay:
+
+    source /opt/ros/jazzy/setup.bash
+    source ros2_ws/install/setup.bash
+
+Replay the bag:
+
+    ros2 bag play "$BAG_DIR"
+
+If the episode was recorded on an isolated ROS domain, select the desired
+domain before replay:
+
+    export ROS_DOMAIN_ID=190
+    ros2 bag play "$BAG_DIR"
+
+MCAP recordings are intended for runtime inspection, debugging, and replay.
+They are separate from the training-dataset representation used by later
+learning workflows.
+
 ## Continuous Integration
 
 Two GitHub Actions workflows currently validate the repository.
