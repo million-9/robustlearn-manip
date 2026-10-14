@@ -280,6 +280,8 @@ def run_scenario(
     *,
     domain_id: int,
     timeout_s: float,
+    model_path: str | None = None,
+    initial_keyframe: str | None = None,
 ) -> dict[str, Any]:
     """Run one isolated Week 9 scenario and return its result."""
     test_path = scenario_test_path()
@@ -300,6 +302,16 @@ def run_scenario(
     ] = str(
         domain_id
     )
+
+    if model_path is not None:
+        environment[
+            'ROBUSTLEARN_WEEK10_MODEL_PATH'
+        ] = model_path
+
+    if initial_keyframe is not None:
+        environment[
+            'ROBUSTLEARN_WEEK10_INITIAL_KEYFRAME'
+        ] = initial_keyframe
 
     command = (
         sys.executable,

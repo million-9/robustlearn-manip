@@ -86,6 +86,22 @@ def _scenario_name() -> str:
     return scenario
 
 
+def _initial_keyframe_name(
+    scenario: str,
+) -> str:
+    initial_keyframe = os.environ.get(
+        'ROBUSTLEARN_WEEK10_INITIAL_KEYFRAME',
+        scenario,
+    ).strip()
+
+    if not initial_keyframe:
+        raise RuntimeError(
+            'ROBUSTLEARN_WEEK10_INITIAL_KEYFRAME must not be empty'
+        )
+
+    return initial_keyframe
+
+
 @pytest.mark.launch_test
 def generate_test_description():
     package_share = pathlib.Path(
@@ -96,20 +112,38 @@ def generate_test_description():
 
     repository_root = pathlib.Path(__file__).resolve().parents[4]
 
+    model_override = os.environ.get(
+        'ROBUSTLEARN_WEEK10_MODEL_PATH',
+        '',
+    ).strip()
+
     model_path = (
-        repository_root / 'robot_description' / 'mjcf' / 'insertion' / 'panda_insertion.xml'
+        pathlib.Path(model_override).resolve()
+        if model_override
+        else (
+            repository_root
+            / 'robot_description'
+            / 'mjcf'
+            / 'insertion'
+            / 'panda_insertion.xml'
+        )
     )
 
     if not model_path.is_file():
-        raise RuntimeError(f'Week 9 acceptance model not found: {model_path}')
+        raise RuntimeError(
+            f'Week 9 acceptance model not found: {model_path}'
+        )
 
     scenario = _scenario_name()
+    initial_keyframe = _initial_keyframe_name(
+        scenario
+    )
 
     hybrid_insertion = launch.actions.IncludeLaunchDescription(
         launch.launch_description_sources.PythonLaunchDescriptionSource(str(launch_file)),
         launch_arguments={
             'model_path': str(model_path),
-            'initial_keyframe': scenario,
+            'initial_keyframe': initial_keyframe,
             'use_rviz': 'false',
         }.items(),
     )
