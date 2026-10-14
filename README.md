@@ -28,12 +28,13 @@ The project is simulation-first and is being developed incrementally toward a de
 - ONNX Runtime
 - reproducible evaluation and CI
 
-The intended system separates global collision-free motion planning from local contact-rich control. MoveIt 2 will eventually handle the global approach to a pre-insertion pose, while classical and learned controllers will handle the final insertion phase.
+The system separates global collision-free motion planning from local contact-rich control. MoveIt 2 handles the global approach to a pre-insertion configuration, while the classical local expert handles the final contact-rich insertion phase. Learned controllers will be integrated in later milestones.
 
 ## Current Status
 
-**Week 9: validated the complete hybrid MoveIt 2 + classical local insertion
-expert workflow through the project-owned MuJoCo ros2_control hardware path.**
+**Week 10: completed the deployment-oriented expert infrastructure and
+validated a reproducible 200-episode classical expert benchmark with 197/200
+successful episodes (98.5% success).**
 
 RobustLearn-Manip now implements the intended deployment-oriented manipulation
 architecture:
@@ -77,7 +78,7 @@ Both global and local control use the same project-owned runtime stack:
             v
     MuJoCo Panda
 
-Completed through Week 9:
+Completed through Week 10:
 
 - Ubuntu 24.04 LTS development environment configured
 - ROS 2 Jazzy installed and verified
@@ -153,6 +154,20 @@ Completed through Week 9:
 - final Week 9 result reached 20/20 successful scenarios
 - final Week 9 clean success rate reached 100%
 - complete ROS regression suite passes with zero errors and zero failures
+- deterministic episode-management infrastructure implemented
+- structured per-episode terminal result and failure categorisation implemented
+- project-owned MCAP episode logger implemented
+- expert-rollout dataset writer implemented
+- keyboard teleoperation through ros2_control implemented
+- deterministic Week 10 benchmark configuration implemented
+- 200 unique recorded benchmark seeds implemented
+- seed-derived reproducible Panda start-state perturbations implemented
+- exact benchmark configuration and per-episode results persisted
+- atomic per-episode benchmark checkpointing implemented
+- 200-episode classical hybrid expert benchmark completed
+- final Week 10 benchmark reached 197/200 successful episodes
+- final Week 10 benchmark success rate reached 98.5%
+- Week 9 regression remained 20/20 successful after Week 10 changes
 
 The Week 9 issues were:
 
@@ -236,12 +251,111 @@ The validated final Week 9 acceptance result is:
     Minimum gate:    PASS
     Target gate:     PASS
 
-The validated final ROS workspace test result is:
+The validated current ROS workspace test result is:
 
-    165 tests
+    169 tests
     0 errors
     0 failures
     13 skipped
+
+## Week 10 Expert Benchmark
+
+Week 10 added the infrastructure required to turn the Week 9 classical hybrid
+expert into a reproducible evaluation and data-generation system:
+
+- episode manager with deterministic episode specifications and terminal results
+- MCAP episode logging
+- expert-rollout dataset writing
+- keyboard teleoperation through the same ros2_control command path
+- deterministic 200-episode classical expert benchmark
+- reproducible seed-derived initial Panda joint configurations
+- structured failure categorisation and aggregate benchmark statistics
+- persistent benchmark configuration, raw episode records, and checkpoints
+
+The formal Week 10 benchmark configuration used exactly 200 episodes with
+recorded seeds `0..199`. Each seed deterministically selected one of the 20
+Week 9 scenarios and added a bounded seed-derived perturbation to the seven
+Panda arm joints.
+
+The exact formal benchmark command was:
+
+```bash
+uv run python -m tools.run_week10_benchmark \
+  --timeout-s 90 \
+  --base-domain-id 190 \
+  --domain-pool-size 40 \
+  --output build/week10_benchmark_results.json \
+  2>&1 | tee build/week10_benchmark_run.log
+```
+
+The validated formal result was:
+
+```text
+WEEK 10 CLASSICAL EXPERT BENCHMARK: PASS
+
+Episodes:       200
+Successes:      197
+Failures:         3
+Success rate:   98.5%
+
+Failure episodes:
+  episode 47   seed 47   week9_case_08   execution_failure
+  episode 57   seed 57   week9_case_18   execution_failure
+  episode 157  seed 157  week9_case_18   execution_failure
+```
+
+All three failed episodes completed MoveIt planning successfully and terminated
+during MoveIt trajectory execution. They remain part of the formal benchmark
+result; diagnostic reruns are not substituted for the original measurements.
+
+The formal benchmark artifacts are:
+
+```text
+build/week10_benchmark_results.json
+build/week10_benchmark_run.log
+```
+
+The saved result artifact was independently validated for:
+
+- exactly 200 episode records
+- ordered episode indices `0..199`
+- 200 unique recorded seeds
+- exact 197-success / 3-failure aggregate
+- expected failure identities and categories
+- no non-finite numeric values
+
+Post-benchmark regression validation was:
+
+```text
+Week 9 acceptance:
+  20 scenarios
+  20 successes
+  0 failures
+  100.0%
+
+Python:
+  396 passed
+  0 failed
+
+ROS robustlearn_moveit_config:
+  169 tests
+  0 errors
+  0 failures
+  13 skipped
+
+Ruff:
+  PASS
+
+mypy:
+  PASS
+
+git diff --check:
+  PASS
+```
+
+The 98.5% formal result exceeds the project's classical expert success target
+while retaining the failed episodes as part of the reported evaluation rather
+than cherry-picking reruns.
 
 Detailed Week 9 documentation is available in:
 
@@ -258,14 +372,10 @@ The deterministic simulation, task, policy-interface, reproducibility,
 MuJoCo-hardware, and MoveIt execution foundations from earlier milestones remain
 part of the completed project base.
 
-Work beyond the Week 9 boundary includes:
+Work beyond the Week 10 boundary includes:
 
-- formal 200-episode classical expert benchmarking
-- episode-management infrastructure
-- MCAP/rosbag logging
-- dataset writing
-- demonstration collection
-- keyboard/gamepad teleoperation
+- scripted and manual demonstration collection
+- dataset statistics, train/validation/test splits, and dataset v0.1 freeze
 - Behaviour Cloning
 - DAgger
 - SAC
