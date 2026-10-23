@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
+from pathlib import Path
+from time import monotonic
 
 from control_msgs.action import FollowJointTrajectory
 import control_msgs.msg
@@ -23,6 +25,10 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 from robustlearn.config import PandaInsertionTaskConfig
+from robustlearn.scripted_demo_collection import (
+    ExpertFrameBuffer,
+    write_expert_frame_capture,
+)
 from robustlearn.scripted_insertion import (
     ClassicalInsertionExpert,
     InsertionPhase,
@@ -298,6 +304,11 @@ class LocalInsertionExpertNode(Node):
             1.0,
         )
 
+        self.declare_parameter(
+            'expert_capture_path',
+            '',
+        )
+
         self._command_enabled = bool(
             self.get_parameter(
                 'command_enabled'
@@ -328,6 +339,18 @@ class LocalInsertionExpertNode(Node):
             ).value
         )
 
+        self._expert_capture_path = str(
+            self.get_parameter(
+                'expert_capture_path'
+            ).value
+        ).strip()
+
+        self._expert_frame_buffer = (
+            ExpertFrameBuffer()
+            if self._expert_capture_path
+            else None
+        )
+
         timing_values = {
             'control_period_s': self._control_period_s,
             'trajectory_duration_s': self._trajectory_duration_s,
@@ -345,6 +368,7 @@ class LocalInsertionExpertNode(Node):
         self._expert = ClassicalInsertionExpert()
 
         self._latest_joint_positions: FloatArray | None = None
+        self._latest_joint_velocities: FloatArray | None = None
         self._latest_controller_command: FloatArray | None = None
         self._latest_wrist_force_sensor: FloatArray | None = None
         self._latest_wrist_torque_sensor: FloatArray | None = None
@@ -529,7 +553,41 @@ class LocalInsertionExpertNode(Node):
             )
             return
 
+        velocities: FloatArray | None = None
+
+        if len(message.velocity) > 0:
+            name_to_velocity = dict(
+                zip(
+                    message.name,
+                    message.velocity,
+                    strict=False,
+                )
+            )
+
+            try:
+                candidate = np.asarray(
+                    [
+                        name_to_velocity[name]
+                        for name in ROS_PANDA_ARM_JOINT_NAMES
+                    ],
+                    dtype=np.float64,
+                )
+            except KeyError:
+                # Incomplete velocity feedback is represented
+                # as unavailable rather than using stale data.
+                candidate = None
+
+            if candidate is not None:
+                if not np.all(np.isfinite(candidate)):
+                    self._abort(
+                        'received non-finite Panda joint velocities'
+                    )
+                    return
+
+                velocities = candidate
+
         self._latest_joint_positions = positions
+        self._latest_joint_velocities = velocities
 
     def _controller_state_callback(
         self,
@@ -599,12 +657,44 @@ class LocalInsertionExpertNode(Node):
         self._latest_wrist_force_sensor = force
         self._latest_wrist_torque_sensor = torque
 
+    def _persist_expert_capture(self) -> str | None:
+        if self._expert_frame_buffer is None:
+            return None
+
+        try:
+            write_expert_frame_capture(
+                Path(self._expert_capture_path),
+                self._expert_frame_buffer.frames,
+            )
+        except (OSError, ValueError, TypeError) as exc:
+            return (
+                'expert capture persistence failed: '
+                f'{type(exc).__name__}: {exc}'
+            )
+
+        return None
+
     def _abort(
         self,
         reason: str,
     ) -> None:
         if self._terminal:
             return
+
+        if self._expert_frame_buffer is not None:
+            try:
+                self._expert_frame_buffer.mark_terminal(
+                    success=False
+                )
+            except (TypeError, ValueError) as exc:
+                reason = (
+                    f'{reason}; expert capture finalization failed: {exc}'
+                )
+
+        capture_error = self._persist_expert_capture()
+
+        if capture_error is not None:
+            reason = f'{reason}; {capture_error}'
 
         self._terminal = True
         self._terminal_reason = reason
@@ -630,6 +720,30 @@ class LocalInsertionExpertNode(Node):
         reason: str,
     ) -> None:
         if self._terminal:
+            return
+
+        if self._expert_frame_buffer is not None:
+            try:
+                self._expert_frame_buffer.mark_terminal(
+                    success=True
+                )
+            except (TypeError, ValueError) as exc:
+                self._abort(
+                    f'expert capture finalization failed: {exc}'
+                )
+                return
+
+        capture_error = self._persist_expert_capture()
+
+        if capture_error is not None:
+            self._terminal = True
+            self._terminal_reason = capture_error
+            self._expert.phase = InsertionPhase.ABORT
+            self._publish_status(
+                STATUS_FAILED,
+                capture_error,
+            )
+            self.get_logger().error(capture_error)
             return
 
         self._terminal = True
@@ -716,9 +830,22 @@ class LocalInsertionExpertNode(Node):
             self.get_clock().now().nanoseconds
         )
 
-        future = self._trajectory_client.send_goal_async(
-            goal
-        )
+        try:
+            future = self._trajectory_client.send_goal_async(
+                goal
+            )
+        except Exception:
+            # Submission failed before the controller could
+            # accept or reject the trajectory goal.
+            self._goal_in_flight = False
+            self._goal_started_ns = None
+
+            if self._expert_frame_buffer is not None:
+                self._expert_frame_buffer.reject_pending_command()
+
+            # Preserve the original submission error for the
+            # existing control-loop abort handler.
+            raise
 
         future.add_done_callback(
             self._goal_response_callback
@@ -730,12 +857,22 @@ class LocalInsertionExpertNode(Node):
     ) -> None:
         if self._terminal:
             self._goal_in_flight = False
+
+            if self._expert_frame_buffer is not None:
+                try:
+                    self._expert_frame_buffer.reject_pending_command()
+                except ValueError:
+                    # An already-resolved command has no pending frame.
+                    pass
+
             return
 
         try:
             goal_handle = future.result()
         except Exception as exc:
             self._goal_in_flight = False
+            if self._expert_frame_buffer is not None:
+                self._expert_frame_buffer.reject_pending_command()
             self._abort(
                 f'trajectory goal request failed: {exc}'
             )
@@ -743,12 +880,23 @@ class LocalInsertionExpertNode(Node):
 
         if goal_handle is None or not goal_handle.accepted:
             self._goal_in_flight = False
+            if self._expert_frame_buffer is not None:
+                self._expert_frame_buffer.reject_pending_command()
             self._abort(
                 'panda_arm_controller rejected the trajectory goal'
             )
             return
 
         self._goal_handle = goal_handle
+
+        if self._expert_frame_buffer is not None:
+            try:
+                self._expert_frame_buffer.accept_pending_command()
+            except ValueError as exc:
+                self._abort(
+                    f'expert capture acceptance failed: {exc}'
+                )
+                return
 
         result_future = goal_handle.get_result_async()
 
@@ -982,9 +1130,47 @@ class LocalInsertionExpertNode(Node):
                     'Controller-relative joint target is non-finite'
                 )
 
-            self._send_joint_target(
-                command_target
-            )
+            if self._expert_frame_buffer is not None:
+                self._expert_frame_buffer.stage_submitted_command(
+                    timestamp_s=monotonic(),
+                    joint_position=tuple(
+                        float(value)
+                        for value in snapshot.joint_positions
+                    ),
+                    joint_velocity=(
+                        tuple(
+                            float(value)
+                            for value in self._latest_joint_velocities
+                        )
+                        if self._latest_joint_velocities is not None
+                        else None
+                    ),
+                    task_relative_state=tuple(
+                        float(value)
+                        for value in (
+                            snapshot.receptacle_center_position
+                            - snapshot.peg_tip_position
+                        )
+                    ),
+                    wrist_wrench=tuple(
+                        float(value)
+                        for value in np.concatenate(
+                            (wrist_force_world, wrist_torque_world)
+                        )
+                    ),
+                    submitted_joint_target=tuple(
+                        float(value)
+                        for value in command_target
+                    ),
+                )
+
+            self._send_joint_target(command_target)
+
+            if (
+                self._expert_frame_buffer is not None
+                and not self._goal_in_flight
+            ):
+                self._expert_frame_buffer.reject_pending_command()
 
         except (RuntimeError, ValueError) as exc:
             self._abort(

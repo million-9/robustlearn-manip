@@ -88,6 +88,7 @@ def run_episode(
     *,
     base_domain_id: int,
     domain_pool_size: int,
+    expert_capture_path: Path | None = None,
 ) -> BenchmarkEpisodeRecord:
     """Run one seeded real hybrid episode and preserve rich Week 9 metrics."""
     domain_id = benchmark_domain_for_episode(
@@ -141,6 +142,11 @@ def run_episode(
             timeout_s=spec.timeout_s,
             model_path=str(temporary_model),
             initial_keyframe=initial_keyframe,
+            expert_capture_path=(
+                str(expert_capture_path)
+                if expert_capture_path is not None
+                else None
+            ),
         )
 
         completion_time_s = time.monotonic() - start
