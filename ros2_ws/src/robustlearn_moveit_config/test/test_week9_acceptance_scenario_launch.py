@@ -145,6 +145,10 @@ def generate_test_description():
             'model_path': str(model_path),
             'initial_keyframe': initial_keyframe,
             'use_rviz': 'false',
+            'expert_capture_path': os.environ.get(
+                'ROBUSTLEARN_WEEK11_EXPERT_CAPTURE_PATH',
+                '',
+            ).strip(),
         }.items(),
     )
 

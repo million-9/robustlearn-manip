@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from robustlearn.episode_manager import EpisodeResult
+from robustlearn.episode_manager import EpisodeResult, EpisodeSpec
 
 ROLLOUT_SCHEMA_VERSION = 1
 PANDA_JOINT_COUNT = 7
@@ -123,6 +123,9 @@ class RolloutEpisode:
     config_id: str
     frames: tuple[RolloutFrame, ...]
     schema_version: int = ROLLOUT_SCHEMA_VERSION
+    start_base_joint_positions_rad: tuple[float, ...] | None = None
+    start_perturbation_rad: tuple[float, ...] | None = None
+    start_joint_positions_rad: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != ROLLOUT_SCHEMA_VERSION:
@@ -178,6 +181,68 @@ class RolloutEpisode:
                 "failed episode must have a non-empty "
                 "failure_reason"
             )
+
+        start_vectors = (
+            self.start_base_joint_positions_rad,
+            self.start_perturbation_rad,
+            self.start_joint_positions_rad,
+        )
+
+        present = tuple(
+            vector is not None
+            for vector in start_vectors
+        )
+
+        if any(present) and not all(present):
+            raise ValueError(
+                "randomization metadata must be all present or absent"
+            )
+
+        if all(present):
+            for name, values in (
+                (
+                    "start_base_joint_positions_rad",
+                    self.start_base_joint_positions_rad,
+                ),
+                (
+                    "start_perturbation_rad",
+                    self.start_perturbation_rad,
+                ),
+                (
+                    "start_joint_positions_rad",
+                    self.start_joint_positions_rad,
+                ),
+            ):
+                assert values is not None
+
+                _validate_finite_vector(
+                    name,
+                    values,
+                    size=PANDA_JOINT_COUNT,
+                )
+
+            base, perturbation, start = start_vectors
+
+            assert base is not None
+            assert perturbation is not None
+            assert start is not None
+
+            for actual, base_value, delta in zip(
+                start,
+                base,
+                perturbation,
+                strict=True,
+            ):
+                if not math.isclose(
+                    actual,
+                    base_value + delta,
+                    rel_tol=0.0,
+                    abs_tol=1.0e-12,
+                ):
+                    raise ValueError(
+                        "start_joint_positions_rad must equal "
+                        "base positions plus perturbation"
+                    )
 
         expected_indices = tuple(
             range(len(self.frames))
@@ -260,6 +325,21 @@ def episode_to_dict(
         "end_timestamp_s": episode.end_timestamp_s,
         "git_commit": episode.git_commit,
         "config_id": episode.config_id,
+        "start_base_joint_positions_rad": (
+            None
+            if episode.start_base_joint_positions_rad is None
+            else list(episode.start_base_joint_positions_rad)
+        ),
+        "start_perturbation_rad": (
+            None
+            if episode.start_perturbation_rad is None
+            else list(episode.start_perturbation_rad)
+        ),
+        "start_joint_positions_rad": (
+            None
+            if episode.start_joint_positions_rad is None
+            else list(episode.start_joint_positions_rad)
+        ),
         "frames": [
             frame_to_dict(frame)
             for frame in episode.frames
@@ -382,6 +462,21 @@ def _require_float_tuple(
     )
 
     return result
+
+
+def _require_optional_start_vector(
+    value: object,
+    *,
+    name: str,
+) -> tuple[float, ...] | None:
+    if value is None:
+        return None
+
+    return _require_float_tuple(
+        value,
+        name=name,
+        size=PANDA_JOINT_COUNT,
+    )
 
 
 def frame_from_dict(
@@ -517,6 +612,24 @@ def episode_from_dict(
             data.get("config_id"),
             name="config_id",
         ),
+        start_base_joint_positions_rad=(
+            _require_optional_start_vector(
+                data.get("start_base_joint_positions_rad"),
+                name="start_base_joint_positions_rad",
+            )
+        ),
+        start_perturbation_rad=(
+            _require_optional_start_vector(
+                data.get("start_perturbation_rad"),
+                name="start_perturbation_rad",
+            )
+        ),
+        start_joint_positions_rad=(
+            _require_optional_start_vector(
+                data.get("start_joint_positions_rad"),
+                name="start_joint_positions_rad",
+            )
+        ),
         frames=tuple(
             frame_from_dict(frame)
             for frame in raw_frames
@@ -525,7 +638,7 @@ def episode_from_dict(
 
 
 def episode_filename(
-    episode: RolloutEpisode,
+    episode: RolloutEpisode | EpisodeSpec,
 ) -> str:
     """Return the deterministic filename for one rollout episode."""
     scenario = "".join(
@@ -549,7 +662,7 @@ def episode_filename(
 
 def episode_path(
     output_root: Path,
-    episode: RolloutEpisode,
+    episode: RolloutEpisode | EpisodeSpec,
 ) -> Path:
     """Return the deterministic path for one rollout episode."""
     return output_root / episode_filename(episode)

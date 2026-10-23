@@ -52,6 +52,12 @@ def generate_launch_description():
         description='Start RViz for the hybrid MoveIt workflow.',
     )
 
+    expert_capture_path_argument = DeclareLaunchArgument(
+        'expert_capture_path',
+        default_value='',
+        description='Optional scripted expert frame-capture JSON path.',
+    )
+
     moveit_mujoco = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             str(
@@ -82,6 +88,9 @@ def generate_launch_description():
                 'control_period_s': 0.02,
                 'trajectory_duration_s': 0.10,
                 'goal_timeout_s': 1.0,
+                'expert_capture_path': LaunchConfiguration(
+                    'expert_capture_path'
+                ),
             }
         ],
         arguments=[
@@ -121,6 +130,7 @@ def generate_launch_description():
             model_path_argument,
             initial_keyframe_argument,
             use_rviz_argument,
+            expert_capture_path_argument,
             moveit_mujoco,
             local_expert,
             coordinator,

@@ -282,6 +282,7 @@ def run_scenario(
     timeout_s: float,
     model_path: str | None = None,
     initial_keyframe: str | None = None,
+    expert_capture_path: str | None = None,
 ) -> dict[str, Any]:
     """Run one isolated Week 9 scenario and return its result."""
     test_path = scenario_test_path()
@@ -312,6 +313,21 @@ def run_scenario(
         environment[
             'ROBUSTLEARN_WEEK10_INITIAL_KEYFRAME'
         ] = initial_keyframe
+
+    if expert_capture_path is not None:
+        if not expert_capture_path.strip():
+            raise ValueError(
+                "expert_capture_path must be non-empty"
+            )
+
+        environment[
+            'ROBUSTLEARN_WEEK11_EXPERT_CAPTURE_PATH'
+        ] = expert_capture_path
+    else:
+        environment.pop(
+            'ROBUSTLEARN_WEEK11_EXPERT_CAPTURE_PATH',
+            None,
+        )
 
     command = (
         sys.executable,
