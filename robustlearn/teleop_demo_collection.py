@@ -419,15 +419,14 @@ def apply_teleop_operator_decision(
             "acceptance requires a dataset output Path"
         )
 
-    for name, value in (
-        ("git_commit", git_commit),
-        ("config_id", config_id),
-        ("task", task),
-    ):
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(
-                f"acceptance requires non-empty {name}"
-            )
+    if not isinstance(git_commit, str) or not git_commit.strip():
+        raise ValueError("acceptance requires non-empty git_commit")
+
+    if not isinstance(config_id, str) or not config_id.strip():
+        raise ValueError("acceptance requires non-empty config_id")
+
+    if not isinstance(task, str) or not task.strip():
+        raise ValueError("acceptance requires non-empty task")
 
     expected_success = decision == "accept_success"
 
@@ -911,14 +910,14 @@ class TeleopCollectionConfig:
                 "teleop output_root must be an absolute Path"
             )
 
-        for name, value in (
+        for name, number in (
             ("episode_index", self.episode_index),
             ("seed", self.seed),
         ):
             if (
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value < 0
+                isinstance(number, bool)
+                or not isinstance(number, int)
+                or number < 0
             ):
                 raise ValueError(
                     f"{name} must be a non-negative integer"

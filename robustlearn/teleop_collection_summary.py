@@ -172,7 +172,9 @@ def summarize_teleop_attempt(
             frames[-1].timestamp_s if frames else None
         ),
         episode_file=(
-            episode_path.name if saved else None
+            episode_path.name
+            if saved and episode_path is not None
+            else None
         ),
         failure_reason=(
             config.failure_reason
@@ -185,7 +187,7 @@ def summarize_teleop_attempt(
 
 def build_teleop_collection_summary(
     attempts: list[TeleopAttemptSummary],
-) -> dict:
+) -> dict[str, object]:
     """Aggregate attempts without mixing reports into the dataset."""
     if not all(
         isinstance(attempt, TeleopAttemptSummary)
