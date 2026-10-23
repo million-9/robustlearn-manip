@@ -1,7 +1,7 @@
 """Tests for reproducible initial-condition metadata."""
 
-from dataclasses import replace
 import math
+from dataclasses import replace
 
 import pytest
 

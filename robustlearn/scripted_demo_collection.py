@@ -8,7 +8,6 @@ import tempfile
 from pathlib import Path
 
 from robustlearn.episode_manager import EpisodeResult
-from robustlearn.week10_benchmark import BenchmarkEpisodeRecord
 from robustlearn.rollout_dataset import (
     RolloutEpisode,
     RolloutFrame,
@@ -18,6 +17,7 @@ from robustlearn.rollout_dataset import (
     frame_to_dict,
     rollout_episode_from_result,
 )
+from robustlearn.week10_benchmark import BenchmarkEpisodeRecord
 
 
 def persist_scripted_expert_episode(

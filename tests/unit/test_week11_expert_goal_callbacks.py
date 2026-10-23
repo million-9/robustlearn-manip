@@ -8,7 +8,6 @@ import pytest
 
 from robustlearn.scripted_demo_collection import ExpertFrameBuffer
 
-
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
     / "ros2_ws"

@@ -1,6 +1,5 @@
 """Tests for the Week 11 scripted demonstration CLI."""
 
-from pathlib import Path
 
 from tools import collect_scripted_demos as collector
 
