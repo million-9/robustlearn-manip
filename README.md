@@ -1636,3 +1636,22 @@ schema, but are not accepted by the training-ready dataset validator.
 
 See [Week 11 dataset validation](docs/week11_dataset_validation.md)
 for commands, acceptance rules, and limitations.
+
+## Week 11 Deterministic Dataset Splits
+
+Generate a leakage-aware episode-level split manifest:
+
+    uv run python -m robustlearn.dataset_splits PATH_TO_EPISODES --manifest PATH_TO_REPORTS/splits.json --dataset-ref week11-candidate --seed 42
+
+Verify an existing manifest:
+
+    uv run python -m robustlearn.dataset_splits PATH_TO_EPISODES --manifest PATH_TO_REPORTS/splits.json --check
+
+The default `scenario_initial` policy keeps episodes sharing
+scenario labels or recorded initial joint configurations together.
+
+Split proportions are configurable and may be approximate when
+indivisible groups prevent exact balancing.
+
+See [Week 11 dataset splits](docs/week11_dataset_splits.md)
+for configuration, grouping limitations, and manifest verification.
