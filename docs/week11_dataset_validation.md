@@ -45,6 +45,30 @@ Statistics include:
 Numeric statistics are available for joint position, joint velocity,
 task-relative state, wrist wrench, and expert action.
 
+## Action semantics
+
+For Week 11 scripted and teleoperation collectors, `expert_action`
+is the submitted absolute 7-DoF joint-position target in radians.
+
+It is **not** an action delta, velocity command, or measured
+next-state displacement.
+
+The action is associated with the observation recorded when the
+command was submitted. The subsequent observed joint configuration
+may differ from the target because of control dynamics, timing,
+or execution constraints.
+
+Do not subtract current joint positions or otherwise reinterpret
+stored actions during dataset curation.
+
+The schema validates shape and numerical finiteness. It does not
+independently prove the semantics of records produced by other
+collectors.
+
+Legacy scripted records may carry `source="expert"`; converting
+them to the dataset-validator label `scripted` requires an explicit,
+auditable provenance record rather than modifying the originals.
+
 Statistics include accepted failures as well as successful demonstrations.
 They are not filtered to successful episodes only.
 

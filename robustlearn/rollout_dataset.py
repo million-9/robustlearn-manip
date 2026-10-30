@@ -37,7 +37,12 @@ def _validate_finite_vector(
 
 @dataclass(frozen=True)
 class RolloutFrame:
-    """One time-aligned expert rollout frame."""
+    """One time-aligned expert rollout frame.
+
+    Week 11 scripted and teleop collectors store the submitted absolute
+    joint-position target, in radians, in ``expert_action``. The schema
+    validates dimensions and finiteness, not actuator command semantics.
+    """
 
     frame_index: int
     timestamp_s: float
