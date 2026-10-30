@@ -203,3 +203,91 @@ def test_cli_refuses_report_inside_episode_directory(tmp_path):
         str(root / "stats.json"),
     ]) == 2
     assert not (root / "stats.json").exists()
+
+
+def test_out_of_order_timestamps_within_episode_bounds(tmp_path):
+    """Reject reversed timestamps even when both lie within episode bounds."""
+    root = tmp_path / "episodes"
+    path = write_episode(root, make_episode())
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    data["frames"][0]["timestamp_s"] = 1.8
+    data["frames"][1]["timestamp_s"] = 1.7
+
+    write_raw(path, data)
+
+    with pytest.raises(
+        DatasetValidationError,
+        match="frame timestamps must be non-decreasing",
+    ):
+        validate_dataset(root)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("inf"), float("-inf")],
+    ids=["positive_infinity", "negative_infinity"],
+)
+def test_infinite_action_values_rejected(tmp_path, value):
+    """Reject positive and negative infinity in canonical action data."""
+    root = tmp_path / "episodes"
+    path = write_episode(root, make_episode())
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["frames"][0]["expert_action"][3] = value
+
+    write_raw(path, data)
+
+    with pytest.raises(DatasetValidationError, match="finite"):
+        validate_dataset(root)
+
+
+@pytest.mark.parametrize("field", ["scenario", "task"])
+def test_blank_required_metadata_rejected(tmp_path, field):
+    """Whitespace-only scenario and task metadata must fail."""
+    root = tmp_path / "episodes"
+    path = write_episode(root, make_episode())
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data[field] = "   "
+
+    write_raw(path, data)
+
+    with pytest.raises(
+        DatasetValidationError,
+        match=f"{field} must be non-empty",
+    ):
+        validate_dataset(root)
+
+
+def test_nonfinite_timestamp_rejected(tmp_path):
+    """Reject infinite timestamps before statistics generation."""
+    root = tmp_path / "episodes"
+    path = write_episode(root, make_episode())
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["frames"][0]["timestamp_s"] = float("inf")
+
+    write_raw(path, data)
+
+    with pytest.raises(DatasetValidationError, match="finite"):
+        validate_dataset(root)
+
+
+def test_multiple_corrupted_files_reported(tmp_path):
+    """Report separate corrupted episodes instead of stopping at the first."""
+    root = tmp_path / "episodes"
+    root.mkdir()
+
+    (root / "broken_a.json").write_text("{invalid", encoding="utf-8")
+    (root / "broken_b.json").write_text("[]", encoding="utf-8")
+
+    with pytest.raises(DatasetValidationError) as exc:
+        validate_dataset(root)
+
+    message = str(exc.value)
+
+    assert "broken_a.json" in message
+    assert "broken_b.json" in message
+    assert len(exc.value.diagnostics) == 2
