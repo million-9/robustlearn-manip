@@ -1614,3 +1614,25 @@ their own acceptance criteria are satisfied.
 
 The project continues to follow the principle that capabilities are not treated
 as complete until they are reproducible, tested, and documented.
+
+## Week 11 Dataset Validation and Statistics
+
+Validate a candidate training dataset:
+
+    uv run python -m robustlearn.dataset_validation PATH_TO_EPISODES
+
+Generate a deterministic JSON statistics report:
+
+    uv run python -m robustlearn.dataset_validation PATH_TO_EPISODES --json-output PATH_TO_REPORTS/statistics.json
+
+Reports must be written outside the canonical episode directory.
+
+The validator detects malformed, duplicate, non-finite, incorrectly
+dimensioned, or incomplete episodes. Rejected episodes are not silently
+removed or repaired.
+
+Zero-frame failure records are valid archival evidence under the Week 10
+schema, but are not accepted by the training-ready dataset validator.
+
+See [Week 11 dataset validation](docs/week11_dataset_validation.md)
+for commands, acceptance rules, and limitations.
