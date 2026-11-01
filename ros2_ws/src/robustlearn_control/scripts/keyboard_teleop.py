@@ -15,11 +15,30 @@ from uuid import uuid4
 
 from action_msgs.msg import GoalStatus
 from control_msgs.action import FollowJointTrajectory
+from control_msgs.msg import JointTrajectoryControllerState
 import geometry_msgs.msg
+import numpy as np
+from rcl_interfaces.msg import ParameterType
+from rcl_interfaces.srv import GetParameters
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
+from robustlearn.cartesian_safety import (
+    validate_free_space_cartesian_path,
+)
+from robustlearn.cartesian_teleop import (
+    cartesian_joint_target,
+    CartesianTeleopConfig,
+    keyboard_cartesian_delta,
+    reference_relative_cartesian_target,
+)
+from robustlearn.cartesian_wrench_safety import (
+    validate_cartesian_wrench,
+)
+from robustlearn.sim.shadow_kinematics import (
+    ShadowInsertionKinematics,
+)
 from robustlearn.teleop import (
     bounded_joint_target,
     command_due,
@@ -65,6 +84,9 @@ class KeyboardTeleop(Node):
         super().__init__('keyboard_teleop')
 
         self.declare_parameter('joint_step_rad', 0.01)
+        self.declare_parameter('teleop_mode', 'joint')
+        self.declare_parameter('cartesian_step_m', 0.001)
+        self.declare_parameter('cartesian_feedback_timeout_s', 0.25)
         self.declare_parameter('deadman_timeout_s', 0.25)
         self.declare_parameter('min_command_period_s', 0.05)
         self.declare_parameter('trajectory_duration_s', 0.10)
@@ -97,6 +119,42 @@ class KeyboardTeleop(Node):
                     'min_command_period_s'
                 ).value
             ),
+        )
+
+        self._teleop_mode = str(
+            self.get_parameter('teleop_mode').value
+        ).strip().lower()
+
+        if self._teleop_mode not in ('joint', 'cartesian'):
+            raise ValueError(
+                'teleop_mode must be joint or cartesian'
+            )
+
+        self._cartesian_config = CartesianTeleopConfig(
+            linear_step_m=float(
+                self.get_parameter('cartesian_step_m').value
+            )
+        )
+
+        self._cartesian_feedback_timeout_s = float(
+            self.get_parameter(
+                'cartesian_feedback_timeout_s'
+            ).value
+        )
+
+        if (
+            not math.isfinite(self._cartesian_feedback_timeout_s)
+            or self._cartesian_feedback_timeout_s <= 0.0
+        ):
+            raise ValueError(
+                'cartesian_feedback_timeout_s must be '
+                'finite and positive'
+            )
+
+        self._cartesian_shadow = (
+            ShadowInsertionKinematics()
+            if self._teleop_mode == 'cartesian'
+            else None
         )
 
         self._trajectory_duration_s = float(
@@ -150,12 +208,20 @@ class KeyboardTeleop(Node):
 
         self._joint_positions: list[float] | None = None
         self._joint_velocities: list[float] | None = None
+        self._last_joint_feedback_s: float | None = None
+        self._controller_reference_positions: list[float] | None = None
+        self._last_controller_reference_s: float | None = None
+        self._cartesian_parameter_client = None
+        self._cartesian_parameter_future = None
+        self._cartesian_parameter_last_request_s = None
+        self._cartesian_parameter_verified_s = None
         self._last_deadman_refresh_s: float | None = None
         self._last_command_s: float | None = None
         self._last_operator_status_s: float | None = None
 
         self._latest_wrist_force: tuple[float, float, float] | None = None
         self._latest_wrist_torque: tuple[float, float, float] | None = None
+        self._last_wrench_feedback_s: float | None = None
         self._latest_expert_status: str | None = None
         self._injected_keys: list[str] = []
 
@@ -227,8 +293,6 @@ class KeyboardTeleop(Node):
 
         self._controller_completion_tracker = (
             TeleopControllerCompletionTracker()
-            if self._teleop_session is not None
-            else None
         )
         self._aborted = False
         self._review_mode = False
@@ -250,6 +314,22 @@ class KeyboardTeleop(Node):
             self._on_wrench,
             10,
         )
+
+        self._controller_state_subscription = None
+
+        if self._teleop_mode == 'cartesian':
+            self._controller_state_subscription = self.create_subscription(
+                JointTrajectoryControllerState,
+                '/panda_arm_controller/controller_state',
+                self._on_controller_state,
+                10,
+            )
+
+        if self._teleop_mode == 'cartesian':
+            self._cartesian_parameter_client = self.create_client(
+                GetParameters,
+                '/panda_arm_controller/get_parameters',
+            )
 
         self._expert_status_subscription = self.create_subscription(
             String,
@@ -327,6 +407,9 @@ class KeyboardTeleop(Node):
         self,
         message: JointState,
     ) -> None:
+        # Fail closed for Cartesian control if feedback is incomplete.
+        self._last_joint_feedback_s = None
+
         guard = getattr(
             self, '_review_motion_guard', None
         )
@@ -392,6 +475,17 @@ class KeyboardTeleop(Node):
         if all(math.isfinite(value) for value in velocities):
             self._joint_velocities = velocities
 
+            # Cartesian mode needs a feedback freshness timestamp.
+            # Joint mode preserves its original review timing.
+            if (
+                getattr(self, '_teleop_mode', None) == 'cartesian'
+                and all(
+                    math.isfinite(value)
+                    for value in self._joint_positions
+                )
+            ):
+                self._last_joint_feedback_s = self._now_s()
+
         if guard is not None:
             # Use the local monotonic receipt time, not a
             # potentially unrelated ROS/simulation clock.
@@ -413,6 +507,39 @@ class KeyboardTeleop(Node):
                 joint_velocities=velocities,
             )
 
+    def _on_controller_state(
+        self,
+        message: JointTrajectoryControllerState,
+    ) -> None:
+        """Accept only complete finite Panda controller references."""
+        self._controller_reference_positions = None
+        self._last_controller_reference_s = None
+
+        names = list(message.joint_names)
+        positions = list(message.reference.positions)
+
+        if (
+            len(names) != len(positions)
+            or len(names) != len(set(names))
+        ):
+            return
+
+        by_name = dict(zip(names, positions, strict=True))
+
+        if not all(name in by_name for name in PANDA_JOINT_NAMES):
+            return
+
+        reference = [
+            float(by_name[name])
+            for name in PANDA_JOINT_NAMES
+        ]
+
+        if not all(math.isfinite(value) for value in reference):
+            return
+
+        self._controller_reference_positions = reference
+        self._last_controller_reference_s = self._now_s()
+
     def _on_wrench(
         self,
         message: geometry_msgs.msg.WrenchStamped,
@@ -432,13 +559,196 @@ class KeyboardTeleop(Node):
             math.isfinite(value)
             for value in force + torque
         ):
+            self._latest_wrist_force = None
+            self._latest_wrist_torque = None
+            self._last_wrench_feedback_s = None
+
+            if self._teleop_mode == 'cartesian':
+                self._cartesian_wrench_safe(self._now_s())
+
             self.get_logger().warning(
-                'Ignoring non-finite wrist wrench feedback.'
+                'Rejected non-finite wrist wrench feedback.'
             )
             return
 
         self._latest_wrist_force = force
         self._latest_wrist_torque = torque
+
+        if self._teleop_mode == 'cartesian':
+            self._last_wrench_feedback_s = self._now_s()
+            self._cartesian_wrench_safe(
+                self._last_wrench_feedback_s
+            )
+
+    def _on_cartesian_parameter_response(self, future) -> None:
+        """Update the short-lived controller interpolation verification."""
+        if future is not self._cartesian_parameter_future:
+            return
+
+        self._cartesian_parameter_future = None
+        self._cartesian_parameter_verified_s = None
+
+        try:
+            response = future.result()
+            values = response.values
+
+            if (
+                len(values) == 1
+                and values[0].type == ParameterType.PARAMETER_BOOL
+                and values[0].bool_value is True
+            ):
+                self._cartesian_parameter_verified_s = self._now_s()
+        except Exception as exc:
+            self.get_logger().warning(
+                f'Controller interpolation query failed: {exc}'
+            )
+
+        self._cartesian_interpolation_safe(self._now_s())
+
+    def _refresh_cartesian_interpolation(self, now_s: float) -> None:
+        """Query the actual controller without blocking the ROS executor."""
+        client = self._cartesian_parameter_client
+
+        if client is None or not client.service_is_ready():
+            self._cartesian_parameter_verified_s = None
+            self._cartesian_parameter_future = None
+            return
+
+        last_request = self._cartesian_parameter_last_request_s
+        future = self._cartesian_parameter_future
+
+        if future is not None:
+            if (
+                last_request is not None
+                and now_s - last_request > 0.5
+            ):
+                self._cartesian_parameter_verified_s = None
+            return
+
+        if (
+            last_request is not None
+            and now_s - last_request < 0.1
+        ):
+            return
+
+        request = GetParameters.Request()
+        request.names = ['interpolate_from_desired_state']
+
+        self._cartesian_parameter_last_request_s = now_s
+        self._cartesian_parameter_verified_s = (
+            self._cartesian_parameter_verified_s
+        )
+
+        try:
+            future = client.call_async(request)
+        except Exception as exc:
+            self._cartesian_parameter_verified_s = None
+            self.get_logger().warning(
+                f'Controller interpolation request failed: {exc}'
+            )
+            return
+
+        self._cartesian_parameter_future = future
+        future.add_done_callback(
+            self._on_cartesian_parameter_response
+        )
+
+    def _cartesian_interpolation_safe(self, now_s: float) -> bool:
+        """Permit Cartesian motion only with recent positive verification."""
+        verified_at = self._cartesian_parameter_verified_s
+
+        valid = False
+
+        if verified_at is not None:
+            age = now_s - verified_at
+            valid = (
+                math.isfinite(age)
+                and 0.0 <= age <= 0.5
+            )
+
+        if not valid:
+            in_flight = (
+                self._goal_pending
+                or self._active_request_id is not None
+                or self._goal_handle is not None
+            )
+
+            if in_flight:
+                self.get_logger().error(
+                    'Cartesian safety stop: desired-state '
+                    'interpolation is not verified.'
+                )
+                self._stop()
+
+        return valid
+
+    def _cartesian_reference_safe(
+        self,
+        now_s: float,
+    ) -> bool:
+        """Cancel in-flight motion if controller reference is unavailable."""
+        reference = self._controller_reference_positions
+        received = self._last_controller_reference_s
+
+        valid = (
+            reference is not None
+            and received is not None
+            and len(reference) == 7
+            and all(math.isfinite(value) for value in reference)
+        )
+
+        if valid:
+            age = now_s - received
+            valid = (
+                math.isfinite(age)
+                and 0.0 <= age <= self._cartesian_feedback_timeout_s
+            )
+
+        if not valid:
+            in_flight = (
+                self._goal_pending
+                or self._active_request_id is not None
+                or self._goal_handle is not None
+            )
+
+            if in_flight:
+                self.get_logger().error(
+                    'Cartesian controller reference unavailable or stale.'
+                )
+                self._stop()
+
+            return False
+
+        return True
+
+    def _cartesian_wrench_safe(
+        self,
+        now_s: float,
+    ) -> bool:
+        """Reject unsafe feedback and cancel in-flight motion."""
+        try:
+            validate_cartesian_wrench(
+                force_xyz=self._latest_wrist_force,
+                torque_xyz=self._latest_wrist_torque,
+                received_at_s=self._last_wrench_feedback_s,
+                now_s=now_s,
+            )
+        except (ValueError, TypeError) as exc:
+            in_flight = (
+                self._goal_pending
+                or self._active_request_id is not None
+                or self._goal_handle is not None
+            )
+
+            if in_flight:
+                self.get_logger().error(
+                    f'Cartesian wrench safety stop: {exc}'
+                )
+                self._stop()
+
+            return False
+
+        return True
 
     def _on_expert_status(
         self,
@@ -522,6 +832,7 @@ class KeyboardTeleop(Node):
             'task=panda_insertion '
             'source=teleop '
             f'deadman={deadman_status} '
+            f'mode={self._teleop_mode} '
             f'joints={joint_state} '
             f'{wrench_status} '
             f'expert_status={expert_status}'
@@ -823,6 +1134,12 @@ class KeyboardTeleop(Node):
 
         now_s = self._now_s()
 
+        if self._teleop_mode == 'cartesian':
+            self._refresh_cartesian_interpolation(now_s)
+            self._cartesian_interpolation_safe(now_s)
+            self._cartesian_wrench_safe(now_s)
+            self._cartesian_reference_safe(now_s)
+
         if (
             self._last_operator_status_s is None
             or (
@@ -970,10 +1287,16 @@ class KeyboardTeleop(Node):
             return
 
         try:
-            delta = keyboard_joint_delta(
-                key,
-                config=self._config,
-            )
+            if self._teleop_mode == 'cartesian':
+                delta = keyboard_cartesian_delta(
+                    key,
+                    config=self._cartesian_config,
+                )
+            else:
+                delta = keyboard_joint_delta(
+                    key,
+                    config=self._config,
+                )
         except ValueError:
             return
 
@@ -999,6 +1322,16 @@ class KeyboardTeleop(Node):
         if self._goal_pending:
             return
 
+        tracker = getattr(
+            self, '_controller_completion_tracker', None
+        )
+
+        if tracker is None or not tracker.settled:
+            self.get_logger().warning(
+                'Jog blocked: controller completion unverified.'
+            )
+            return
+
         if self._joint_positions is None:
             self.get_logger().warning(
                 'Jog ignored because joint state is unavailable.'
@@ -1006,13 +1339,18 @@ class KeyboardTeleop(Node):
             return
 
         try:
-            target = bounded_joint_target(
-                self._joint_positions,
-                delta,
-                enabled=True,
-                config=self._config,
-            )
-        except ValueError as exc:
+            if self._teleop_mode == 'cartesian':
+                target = self._compute_cartesian_target(
+                    delta, now_s
+                )
+            else:
+                target = bounded_joint_target(
+                    self._joint_positions,
+                    delta,
+                    enabled=True,
+                    config=self._config,
+                )
+        except (ValueError, RuntimeError) as exc:
             self.get_logger().error(
                 f'Teleop command rejected: {exc}'
             )
@@ -1022,6 +1360,118 @@ class KeyboardTeleop(Node):
             target.tolist()
         )
         self._last_command_s = now_s
+
+    def _compute_cartesian_target(
+        self,
+        displacement: np.ndarray,
+        now_s: float,
+    ) -> np.ndarray:
+        """Generate and validate one free-space Cartesian jog."""
+        if not self._cartesian_interpolation_safe(now_s):
+            raise ValueError(
+                'Cartesian jog requires verified '
+                'desired-state interpolation'
+            )
+
+        validate_cartesian_wrench(
+            force_xyz=self._latest_wrist_force,
+            torque_xyz=self._latest_wrist_torque,
+            received_at_s=self._last_wrench_feedback_s,
+            now_s=now_s,
+        )
+
+        if (
+            self._joint_positions is None
+            or self._joint_velocities is None
+            or self._last_joint_feedback_s is None
+        ):
+            raise ValueError(
+                'Cartesian jog requires complete joint feedback'
+            )
+
+        age = now_s - self._last_joint_feedback_s
+
+        if (
+            not math.isfinite(age)
+            or age < 0.0
+            or age > self._cartesian_feedback_timeout_s
+        ):
+            raise ValueError(
+                'Cartesian jog rejected: stale joint feedback'
+            )
+
+        if any(
+            not math.isfinite(value)
+            or abs(value) > 0.1
+            for value in self._joint_velocities
+        ):
+            raise ValueError(
+                'Cartesian jog requires near-stationary joints'
+            )
+
+        shadow = self._cartesian_shadow
+
+        if shadow is None:
+            raise RuntimeError(
+                'Cartesian kinematics unavailable'
+            )
+
+        current = np.asarray(
+            self._joint_positions,
+            dtype=np.float64,
+        )
+
+        snapshot = shadow.update(current)
+
+        if not self._cartesian_reference_safe(now_s):
+            raise ValueError(
+                'Cartesian jog requires fresh controller reference'
+            )
+
+        reference = np.asarray(
+            self._controller_reference_positions,
+            dtype=np.float64,
+        )
+
+        measured_ik_target = cartesian_joint_target(
+            current,
+            snapshot.peg_tip_jacobian,
+            displacement,
+            config=self._cartesian_config,
+        )
+
+        target = reference_relative_cartesian_target(
+            current,
+            reference,
+            measured_ik_target,
+            config=self._cartesian_config,
+        )
+
+        # Validate both physical-motion and reference-command paths.
+        validate_free_space_cartesian_path(
+            shadow,
+            current,
+            measured_ik_target,
+        )
+
+        validate_free_space_cartesian_path(
+            shadow,
+            reference,
+            target,
+        )
+
+        error_mm = (
+            snapshot.receptacle_center_position
+            - snapshot.peg_tip_position
+        ) * 1000.0
+
+        self.get_logger().info(
+            'Cartesian free-space target validated; '
+            f'peg-to-goal error XYZ mm='
+            f'{np.round(error_mm, 2).tolist()}'
+        )
+
+        return target
 
     def _stage_capture_for_target(
         self,

@@ -47,8 +47,24 @@ def generate_launch_description():
         description='Start RViz for interactive MoveIt visualization.',
     )
 
+    alignment_argument = DeclareLaunchArgument(
+        'use_alignment_markers',
+        default_value='false',
+        description='Publish read-only Cartesian alignment markers.',
+    )
+
     description_share = Path(
         get_package_share_directory('robustlearn_description')
+    )
+
+    controllers_yaml_argument = DeclareLaunchArgument(
+        'controllers_yaml',
+        default_value=str(
+            description_share
+            / 'config'
+            / 'mujoco_trajectory_controllers.yaml'
+        ),
+        description='ROS trajectory controller configuration.',
     )
 
     panda_config_share = Path(
@@ -88,6 +104,7 @@ def generate_launch_description():
         launch_arguments={
             'model_path': LaunchConfiguration('model_path'),
             'initial_keyframe': LaunchConfiguration('initial_keyframe'),
+            'controllers_yaml': LaunchConfiguration('controllers_yaml'),
         }.items(),
     )
 
@@ -136,6 +153,22 @@ def generate_launch_description():
         panda_config_share / 'launch' / 'moveit.rviz'
     )
 
+    rviz_config_argument = DeclareLaunchArgument(
+        'rviz_config_file',
+        default_value=str(rviz_config),
+        description='RViz configuration file.',
+    )
+
+    alignment_node = Node(
+        package='robustlearn_control',
+        executable='cartesian_alignment_markers.py',
+        name='cartesian_alignment_markers',
+        condition=IfCondition(
+            LaunchConfiguration('use_alignment_markers')
+        ),
+        output='screen',
+    )
+
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -145,7 +178,7 @@ def generate_launch_description():
         ),
         arguments=[
             '-d',
-            str(rviz_config),
+            LaunchConfiguration('rviz_config_file'),
         ],
         parameters=[
             moveit_config.robot_description,
@@ -162,9 +195,13 @@ def generate_launch_description():
             model_path_argument,
             initial_keyframe_argument,
             use_rviz_argument,
+            alignment_argument,
+            rviz_config_argument,
+            controllers_yaml_argument,
             mujoco_bringup,
             static_tf,
             move_group,
+            alignment_node,
             rviz,
         ]
     )
