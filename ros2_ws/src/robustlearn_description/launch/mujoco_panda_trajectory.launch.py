@@ -31,6 +31,12 @@ def generate_launch_description():
         package_share / 'config' / 'mujoco_trajectory_controllers.yaml'
     )
 
+    controllers_yaml_argument = DeclareLaunchArgument(
+        'controllers_yaml',
+        default_value=str(controllers_yaml),
+        description='Controller configuration file to load.',
+    )
+
     model_path_argument = DeclareLaunchArgument(
         'model_path',
         description=(
@@ -49,6 +55,7 @@ def generate_launch_description():
 
     model_path = LaunchConfiguration('model_path')
     initial_keyframe = LaunchConfiguration('initial_keyframe')
+    controller_config = LaunchConfiguration('controllers_yaml')
 
     robot_description = {
         'robot_description': Command(
@@ -75,7 +82,7 @@ def generate_launch_description():
     controller_manager = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[str(controllers_yaml)],
+        parameters=[controller_config],
         remappings=[
             ('~/robot_description', '/robot_description'),
         ],
@@ -112,6 +119,7 @@ def generate_launch_description():
         [
             model_path_argument,
             initial_keyframe_argument,
+            controllers_yaml_argument,
             robot_state_publisher,
             controller_manager,
             controllers_spawner,

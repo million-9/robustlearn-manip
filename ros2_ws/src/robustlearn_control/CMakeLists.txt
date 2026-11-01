@@ -89,6 +89,7 @@ install(
   PROGRAMS
     scripts/keyboard_teleop.py
     scripts/local_insertion_expert.py
+    scripts/cartesian_alignment_markers.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -148,6 +149,11 @@ if(BUILD_TESTING)
   add_launch_test(
     test/test_keyboard_teleop_launch.py
     TIMEOUT 10
+  )
+
+  add_launch_test(
+    test/test_keyboard_cartesian_teleop_launch.py
+    TIMEOUT 15
   )
 
 endif()
