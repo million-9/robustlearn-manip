@@ -88,6 +88,10 @@ def make_node(*, recording=True):
     )
 
     node = SimpleNamespace(
+        _teleop_mode='joint',
+        _controller_completion_tracker=SimpleNamespace(
+            settled=True
+        ),
         _teleop_session=session,
         _review_ready_for_decision=lambda: False,
         _review_mode=False,
@@ -302,3 +306,32 @@ def test_review_summary_retry_key():
     press("v")
     press("s")
     assert retries == [True]
+
+
+def test_unresolved_controller_cancellation_blocks_new_jog():
+    """Do not submit a second goal before cancellation settles."""
+    node, _, press, commands, cancellations = make_node(
+        recording=False
+    )
+
+    # The operator stops an active trajectory.
+    press("x")
+
+    assert cancellations == [True]
+    assert not node._goal_pending
+
+    # Simulate a controller request whose cancellation
+    # has not yet reached a confirmed terminal result.
+    node._controller_completion_tracker = SimpleNamespace(
+        settled=False,
+    )
+
+    # Re-enabling deadman must not authorize a new goal
+    # while the previous controller request remains unsettled.
+    press(" ")
+    press("q")
+
+    assert commands == [], (
+        "New trajectory submitted before previous "
+        "controller cancellation was confirmed."
+    )
