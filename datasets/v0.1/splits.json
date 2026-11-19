@@ -1,6 +1,6 @@
 {
-  "dataset_reference": "week11-v01-93-scripted-candidate-not-frozen",
-  "dataset_sha256": "fd609550ad3bb6743a60dabe99652e26899afd0f53b64ddcf65109b237a16252",
+  "dataset_reference": "week11-v01-94-mixed-frozen",
+  "dataset_sha256": "eb28d409db76e18c6a8e6f6f0ccb49429f0271d4bf8a6f16881637ae0dd5db3f",
   "group_by": "scenario_initial",
   "manifest_version": 1,
   "ratios": {
@@ -13,43 +13,43 @@
     "test": {
       "episode_count": 14,
       "episode_files": [
-        "episode_001008__seed_1008__week9_case_09.json",
         "episode_001013__seed_1013__week9_case_14.json",
-        "episode_001028__seed_1028__week9_case_09.json",
+        "episode_001015__seed_1015__week9_case_16.json",
         "episode_001033__seed_1033__week9_case_14.json",
         "episode_001034__seed_1034__week9_case_15.json",
-        "episode_001048__seed_1048__week9_case_09.json",
+        "episode_001035__seed_1035__week9_case_16.json",
         "episode_001053__seed_1053__week9_case_14.json",
         "episode_001054__seed_1054__week9_case_15.json",
-        "episode_001068__seed_1068__week9_case_09.json",
+        "episode_001055__seed_1055__week9_case_16.json",
         "episode_001073__seed_1073__week9_case_14.json",
         "episode_001074__seed_1074__week9_case_15.json",
-        "episode_001088__seed_1088__week9_case_09.json",
+        "episode_001075__seed_1075__week9_case_16.json",
         "episode_001093__seed_1093__week9_case_14.json",
-        "episode_001094__seed_1094__week9_case_15.json"
+        "episode_001094__seed_1094__week9_case_15.json",
+        "episode_001095__seed_1095__week9_case_16.json"
       ],
       "episode_ids": [
-        1008,
         1013,
-        1028,
+        1015,
         1033,
         1034,
-        1048,
+        1035,
         1053,
         1054,
-        1068,
+        1055,
         1073,
         1074,
-        1088,
+        1075,
         1093,
-        1094
+        1094,
+        1095
       ],
-      "frame_count": 557,
+      "frame_count": 561,
       "group_count": 3,
       "scenarios": {
-        "week9_case_09": 5,
         "week9_case_14": 5,
-        "week9_case_15": 4
+        "week9_case_15": 4,
+        "week9_case_16": 5
       },
       "sources": {
         "scripted": 14
@@ -59,7 +59,7 @@
       }
     },
     "train": {
-      "episode_count": 64,
+      "episode_count": 65,
       "episode_files": [
         "episode_001000__seed_1000__week9_case_01.json",
         "episode_001001__seed_1001__week9_case_02.json",
@@ -124,7 +124,8 @@
         "episode_001090__seed_1090__week9_case_11.json",
         "episode_001091__seed_1091__week9_case_12.json",
         "episode_001092__seed_1092__week9_case_13.json",
-        "episode_001096__seed_1096__week9_case_17.json"
+        "episode_001096__seed_1096__week9_case_17.json",
+        "episode_002004__seed_2004__manual_home_insertion_retry_01.json"
       ],
       "episode_ids": [
         1000,
@@ -190,11 +191,13 @@
         1090,
         1091,
         1092,
-        1096
+        1096,
+        2004
       ],
-      "frame_count": 2540,
-      "group_count": 14,
+      "frame_count": 2573,
+      "group_count": 15,
       "scenarios": {
+        "manual_home_insertion_retry_01": 1,
         "week9_case_01": 5,
         "week9_case_02": 5,
         "week9_case_03": 5,
@@ -211,52 +214,54 @@
         "week9_case_18": 2
       },
       "sources": {
-        "scripted": 64
+        "scripted": 64,
+        "teleop": 1
       },
       "tasks": {
+        "panda_insertion": 1,
         "peg_insertion": 64
       }
     },
     "validation": {
       "episode_count": 15,
       "episode_files": [
-        "episode_001015__seed_1015__week9_case_16.json",
+        "episode_001008__seed_1008__week9_case_09.json",
         "episode_001018__seed_1018__week9_case_19.json",
         "episode_001019__seed_1019__week9_case_20.json",
-        "episode_001035__seed_1035__week9_case_16.json",
+        "episode_001028__seed_1028__week9_case_09.json",
         "episode_001038__seed_1038__week9_case_19.json",
         "episode_001039__seed_1039__week9_case_20.json",
-        "episode_001055__seed_1055__week9_case_16.json",
+        "episode_001048__seed_1048__week9_case_09.json",
         "episode_001058__seed_1058__week9_case_19.json",
         "episode_001059__seed_1059__week9_case_20.json",
-        "episode_001075__seed_1075__week9_case_16.json",
+        "episode_001068__seed_1068__week9_case_09.json",
         "episode_001078__seed_1078__week9_case_19.json",
         "episode_001079__seed_1079__week9_case_20.json",
-        "episode_001095__seed_1095__week9_case_16.json",
+        "episode_001088__seed_1088__week9_case_09.json",
         "episode_001098__seed_1098__week9_case_19.json",
         "episode_001099__seed_1099__week9_case_20.json"
       ],
       "episode_ids": [
-        1015,
+        1008,
         1018,
         1019,
-        1035,
+        1028,
         1038,
         1039,
-        1055,
+        1048,
         1058,
         1059,
-        1075,
+        1068,
         1078,
         1079,
-        1095,
+        1088,
         1098,
         1099
       ],
-      "frame_count": 597,
+      "frame_count": 593,
       "group_count": 3,
       "scenarios": {
-        "week9_case_16": 5,
+        "week9_case_09": 5,
         "week9_case_19": 5,
         "week9_case_20": 5
       },
@@ -268,6 +273,6 @@
       }
     }
   },
-  "total_episodes": 93,
-  "total_frames": 3694
+  "total_episodes": 94,
+  "total_frames": 3727
 }

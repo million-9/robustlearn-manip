@@ -1,6 +1,6 @@
 {
-  "curated_format": "canonical_scripted",
-  "episode_count": 93,
+  "curated_format": "canonical_mixed",
+  "episode_count": 94,
   "episodes": [
     {
       "curated_filename": "episode_001000__seed_1000__week9_case_01.json",
@@ -1582,9 +1582,27 @@
       "success": true,
       "task": "peg_insertion",
       "transformation": "source-label-only"
+    },
+    {
+      "curated_filename": "episode_002004__seed_2004__manual_home_insertion_retry_01.json",
+      "curated_sha256": "cb3b0639cbfd7511aa9e92775f7696ddd1daf5d1855096c0c219e80ee112a63d",
+      "curated_source": "teleop",
+      "episode_index": 2004,
+      "frame_count": 33,
+      "original_source": "teleop",
+      "scenario": "manual_home_insertion_retry_01",
+      "seed": 2004,
+      "source_config_id": "week11-v01-human-home-v1",
+      "source_filename": "episode_002004__seed_2004__manual_home_insertion_retry_01.json",
+      "source_git_commit": "815a12373e455b3040b1e5c7839aa2b53a2b3e07",
+      "source_path": "build/week11_manual_2004_uEe9zR/episodes/episode_002004__seed_2004__manual_home_insertion_retry_01.json",
+      "source_sha256": "cb3b0639cbfd7511aa9e92775f7696ddd1daf5d1855096c0c219e80ee112a63d",
+      "success": true,
+      "task": "panda_insertion",
+      "transformation": "byte-identical-copy"
     }
   ],
   "manifest_version": 1,
-  "source_format": "week11_scripted_expert",
-  "status": "CURATED_CANDIDATE_NOT_FROZEN"
+  "source_format": "week11_scripted_expert_and_human_teleop",
+  "status": "CURATED_FROZEN"
 }

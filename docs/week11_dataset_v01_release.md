@@ -2,62 +2,70 @@
 
 GitHub Issue: #103
 
-Status: DRAFT_NOT_FROZEN
+Status: FROZEN
 
 ## 1. Dataset Inventory
 
-The current release candidate contains:
+The current mixed-source release candidate contains:
 
 - 93 scripted expert demonstrations
-- 0 teleoperation demonstrations
-- 3,694 recorded frames
-- 93 successful episodes
+- 1 human teleoperation demonstration
+- 94 total episodes
+- 3,727 recorded frames
+- 94 successful episodes
 - 0 failed episodes
-- 20 recorded scenarios
+- 21 recorded scenarios
 
 Dataset location:
 
-    datasets/v0.1_staging/
+    datasets/v0.1/
 
-This is a verified candidate, not an approved frozen release.
+Status: FROZEN
+
+This is an integrity-verified frozen dataset snapshot.
+Publication remains pending Git and PR acceptance.
 
 ## 2. Dataset Fingerprint
 
 Canonical episode dataset SHA-256:
 
-    fd609550ad3bb6743a60dabe99652e26899afd0f53b64ddcf65109b237a16252
+    eb28d409db76e18c6a8e6f6f0ccb49429f0271d4bf8a6f16881637ae0dd5db3f
 
 Artifact SHA-256 fingerprints:
 
 Statistics:
 
-    49cf0fe7875ff64b45a4f5e432f11e17008fe547eaff89a6b74cf58c3be87b41
+    6e31a96dba564592454291fd99258ec65d1ddcefbf6e8552e2617438ce18c5c0
 
 Splits:
 
-    26e1095943f10971d501762e4f3bad997aefc88c999760b662eb429e26c30dc5
+    fa45836a7727ed783a316589ea48c310c4ac71501b21c8cfe2727dc35454869c
 
 Provenance:
 
-    925e338e44a45b8951872a171faa37f2d8207c9667b988a522db99cf14dc5fd0
+    d133219e78e196ac7c36b0a200fdb757d90fe707babf9b9325be8ef03cd17c9e
 
-The draft dataset manifest contains individual episode checksums.
+The draft manifest contains individual checksums for all
+94 episodes.
+
+The frozen snapshot passes the dataset freeze verifier.
 
 ## 3. Dataset Splits
 
 The canonical deterministic split assignment is:
 
-- Train: 64 episodes
+- Train: 65 episodes
 - Validation: 15 episodes
 - Test: 14 episodes
 - Seed: 42
 - Grouping: scenario_initial
+- Dataset reference: week11-v01-94-mixed-candidate-not-frozen
 
 The split checker verifies deterministic assignment and
 protects against shared scenario and recorded initial-condition
 groups crossing dataset partitions.
 
-The existing split reference remains marked as a candidate.
+The split manifest is frozen with the v0.1 snapshot.
 
 ## 4. Validation Instructions
 
@@ -69,11 +77,11 @@ Verify the complete staging snapshot:
 
 Validate the canonical dataset schema:
 
-    uv run python -m robustlearn.dataset_validation datasets/v0.1_staging/episodes
+    uv run python -m robustlearn.dataset_validation datasets/v0.1/episodes
 
 Verify deterministic dataset splits:
 
-    uv run python -m robustlearn.dataset_splits datasets/v0.1_staging/episodes --manifest datasets/v0.1_staging/splits.json --check
+    uv run python -m robustlearn.dataset_splits datasets/v0.1/episodes --manifest datasets/v0.1/splits.json --check
 
 Run freeze-verifier regression tests:
 
@@ -96,35 +104,57 @@ Source-to-curated integrity was separately verified against:
 
 ## 5. Teleoperation Demonstrations
 
-Human-operated Cartesian teleoperation has been demonstrated.
+One human-operated Cartesian insertion demonstration is
+included in the mixed-source candidate.
 
-The recording pipeline supports:
+Episode:
 
-- Operator-controlled Cartesian movements
-- Explicit deadman controls
-- Controller completion verification
-- Operator review and approval
-- Canonical episode export
-- Dataset schema validation
+    episode_002004__seed_2004__manual_home_insertion_retry_01.json
 
-A verified two-frame accepted-failure pilot exists at:
+Collection evidence:
 
-    build/week11_manual_retry_ZUt6No/episodes/
+- Source: teleop
+- Scenario: manual_home_insertion_retry_01
+- Recorded frames: 33
+- Saved outcome: success
+- Final-frame task_success: true
+- Final-frame geometric success: verified
+- Final lateral error: approximately 0.535 mm
+- Final insertion depth: approximately 12.586 mm
+- Maximum consecutive recorded displacement: 0.997 mm
+- No consecutive recorded displacement above 2 mm
+- Canonical dataset validation: passed
 
-This pilot is excluded from the current release candidate.
+The recording was captured through the ROS2 Cartesian
+teleoperation controller with operator deadman controls,
+controller-feedback observations, explicit review, and
+canonical episode export.
 
-It demonstrates recording functionality but not successful
-peg insertion or a meaningful complete manipulation trajectory.
+The trajectory uses command-triggered recording rather
+than uniform-rate sampling. The maximum observed timestamp
+gap was 19.041 seconds, consistent with deliberate operator
+pauses. Original timestamps have been preserved.
 
-Earlier Week 11 acceptance documentation references a
-22-frame human-operated recording.
+Source-specific Git revision, configuration ID, episode
+seed, checksums, and transformation information are recorded
+in provenance.json.
 
-That artifact was not found in the searched local dataset
-directories and is not included in this candidate.
+The scripted demonstrations retain the task label
+peg_insertion; the teleoperation demonstration uses
+panda_insertion. These distinct recorded labels are preserved.
 
-The current candidate is therefore SCRIPTED ONLY.
+### Mixed-source limitations
 
-Mixed-source acceptance requirements remain unresolved.
+- Only one human teleoperation demonstration is included.
+- All 94 selected episodes are successful; failure coverage
+  is absent from the released candidate.
+- Teleoperation sampling is command-triggered, not fixed-rate.
+- No mixed-source policy-training benchmark has been established.
+- Dataset integrity does not establish downstream policy quality.
+- The dataset is frozen locally but has not yet been published.
+
+The earlier incomplete teleoperation pilots and deleted
+recordings are not included.
 
 ## 6. Reproducibility
 
@@ -142,8 +172,9 @@ The dataset provenance contains:
 - Scenario identifiers
 - Transformation records
 
-The exact scripted regeneration commands must be verified
-against the existing collection tooling before release.
+The historical collector interface and reconstructed
+seed-to-scenario schedule have been verified. The complete
+original production invocation remains unverified.
 
 Matching provenance checksums establishes the identity
 of existing artifacts, not guaranteed byte-for-byte replay
@@ -245,8 +276,63 @@ the canonical dataset curation command on the selected files.
 Regenerated trajectories are not guaranteed byte-identical
 because simulation execution and ROS2 timing may differ.
 
-The frozen dataset checksums refer to the original verified
-artifacts, not newly regenerated trajectories.
+The frozen dataset checksums identify the verified
+release artifacts, not newly regenerated trajectories.
+
+### Verified collection schedule reconstruction
+
+The original collector interface was inspected at source
+revision:
+
+    e2c9a265766cdeffb95f092c8a9a4cb6ea035abb
+
+Its command-line arguments match the current collection
+interface.
+
+The following command reconstructs the planned schedule
+without launching ROS2 simulations:
+
+    uv run python -m tools.collect_scripted_demos \
+      --count 100 \
+      --start-seed 1000 \
+      --timeout-s 90 \
+      --config-id week11-v01-production-v1 \
+      --git-commit e2c9a265766cdeffb95f092c8a9a4cb6ea035abb \
+      --dry-run
+
+Verification results:
+
+- 100 episodes scheduled with seeds 1000 through 1099
+- All 93 retained scripted episodes match the reconstructed
+  episode indices and scenario assignments
+- Seven scheduled episodes were excluded by the documented
+  success-only selection policy
+- The schedule matches the retained scripted provenance
+
+The 90-second timeout is the historical collector's
+default and the value used for this reconstruction.
+It is not independently verified as the timeout used
+during the original production execution.
+
+### Full trajectory regeneration limitations
+
+A new production collection would require:
+
+- The recorded source revision
+- A configured ROS2 Jazzy, MoveIt2, and MuJoCo environment
+- Isolated dataset, capture, and summary output directories
+- The recorded configuration ID and seed range
+- Independent validation and success-only curation
+
+The precise original timeout, complete runtime environment,
+and full production command remain unverified.
+
+Reconstructed schedule agreement does not establish
+trajectory-level numerical reproducibility.
+
+The source checksums and curated checksums in provenance.json
+identify the preserved original artifacts. A new collection
+must not overwrite the versioned dataset.
 
 ## 7. Dataset Versioning Policy
 
@@ -256,38 +342,44 @@ Any change to episode contents, episode membership,
 split assignments, or accepted dataset metadata requires
 a new versioned release.
 
-The current staging snapshot is not immutable.
+The frozen snapshot must remain unchanged after publication.
+Its durable Git release identity is still pending.
 
 ## 8. Outstanding Acceptance Gates
 
 Before closing GitHub Issue #103:
 
-- Resolve scripted-only versus mixed-source release scope
-- Verify scripted regeneration instructions
-- Finalize the versioned dataset manifest
-- Finalize the release directory and version identity
-- Pin the release Git revision
-- Run full Python regression tests
-- Run ROS2 build, tests, and lint checks
-- Review and commit release artifacts
-- Create and merge the GitHub pull request
-- Confirm reproducibility from the released revision
+- Review the final frozen release artifacts
+- Stage and commit the release and tooling changes
+- Pin the release identity to a Git commit or tag
+- Re-run validation against the committed release
+- Push the feature branch and open the GitHub pull request
+- Confirm CI passes and merge the pull request
+- Verify snapshot integrity from the released revision
+
+The original scripted production runtime parameters remain
+partially unverified, as documented in Section 6.
 
 ## 9. Current Status
 
-The 93-episode dataset candidate has passed:
+The 94-episode mixed-source frozen snapshot has passed:
 
 - Canonical dataset validation
 - Statistics verification
 - Episode checksum verification
-- Source-to-curated integrity verification
+- Scripted source-to-curated integrity verification (93 episodes)
 - Canonical deterministic split validation
 - Draft snapshot verification
-- Freeze-verifier regression tests
+- Freeze-verifier and mixed-source metadata regression tests
 - A semantic split-corruption rejection test
+- Full Python regression suite (928 passed)
+- ROS2 build (5 packages)
+- ROS2 tests (180 tests, 0 failures, 13 skipped)
+- Ruff lint validation
+- Git diff integrity checks
 
 Final status:
 
-    DRAFT_NOT_FROZEN
+    FROZEN
 
 GitHub Issue #103 remains open.

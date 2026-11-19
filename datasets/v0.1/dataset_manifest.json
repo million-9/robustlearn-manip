@@ -1,14 +1,14 @@
 {
   "artifact_sha256": {
-    "provenance.json": "925e338e44a45b8951872a171faa37f2d8207c9667b988a522db99cf14dc5fd0",
-    "splits.json": "26e1095943f10971d501762e4f3bad997aefc88c999760b662eb429e26c30dc5",
-    "statistics.json": "49cf0fe7875ff64b45a4f5e432f11e17008fe547eaff89a6b74cf58c3be87b41"
+    "provenance.json": "d133219e78e196ac7c36b0a200fdb757d90fe707babf9b9325be8ef03cd17c9e",
+    "splits.json": "fa45836a7727ed783a316589ea48c310c4ac71501b21c8cfe2727dc35454869c",
+    "statistics.json": "6e31a96dba564592454291fd99258ec65d1ddcefbf6e8552e2617438ce18c5c0"
   },
   "canonical_split_manifest": "splits.json",
-  "created_at_utc": "2026-11-13T23:38:27.606390+00:00",
-  "dataset_sha256": "fd609550ad3bb6743a60dabe99652e26899afd0f53b64ddcf65109b237a16252",
+  "created_at_utc": "2026-11-19T16:56:11.746572+00:00",
+  "dataset_sha256": "eb28d409db76e18c6a8e6f6f0ccb49429f0271d4bf8a6f16881637ae0dd5db3f",
   "dataset_version": "v0.1",
-  "episode_count": 93,
+  "episode_count": 94,
   "episode_sha256": {
     "episode_001000__seed_1000__week9_case_01.json": "07c67ce0c41139d0e286363a4200110935c20299c8ad22097a74a4657deeb685",
     "episode_001001__seed_1001__week9_case_02.json": "b4cb4ffe3d9d8a565c7430bba006ddf2cfa780d61a9070879c446ea8cee3d530",
@@ -102,17 +102,21 @@
     "episode_001095__seed_1095__week9_case_16.json": "1c19ff410fee26a99e468bee8db7908b15b976160886d7a25bf70a7c5e376ca3",
     "episode_001096__seed_1096__week9_case_17.json": "b6a54e7075d86a088c3dd6dfb113fc0728e06b54cbe060e3638b0a066040de54",
     "episode_001098__seed_1098__week9_case_19.json": "255521a928cdf02ec42d188d0130f90e362a6e7449be35900eb3a9f318f1ace2",
-    "episode_001099__seed_1099__week9_case_20.json": "4cbaa6e50be5fc83e8a448ac8a77630e249e5567a95a562d40936ae3ed181f4f"
+    "episode_001099__seed_1099__week9_case_20.json": "4cbaa6e50be5fc83e8a448ac8a77630e249e5567a95a562d40936ae3ed181f4f",
+    "episode_002004__seed_2004__manual_home_insertion_retry_01.json": "cb3b0639cbfd7511aa9e92775f7696ddd1daf5d1855096c0c219e80ee112a63d"
   },
   "failure_count": 0,
-  "frame_count": 3694,
+  "frame_count": 3727,
   "manifest_version": 1,
   "release_limitations": [
-    "Scripted-only candidate",
-    "No teleoperation episodes included",
-    "Mixed-data acceptance scope unresolved"
+    "Only one human teleoperation demonstration",
+    "All selected episodes are successful; no failure coverage",
+    "Teleoperation is command-triggered, not fixed-rate",
+    "Mixed-source training quality not yet benchmarked",
+    "Original production runtime parameters not fully recovered"
   ],
   "scenario_distribution": {
+    "manual_home_insertion_retry_01": 1,
     "week9_case_01": 5,
     "week9_case_02": 5,
     "week9_case_03": 5,
@@ -229,23 +233,28 @@
     1095,
     1096,
     1098,
-    1099
+    1099,
+    2004
   ],
   "source_config_ids": [
+    "week11-v01-human-home-v1",
     "week11-v01-production-v1"
   ],
   "source_distribution": {
-    "scripted": 93
+    "scripted": 93,
+    "teleop": 1
   },
   "source_git_commits": [
+    "815a12373e455b3040b1e5c7839aa2b53a2b3e07",
     "e2c9a265766cdeffb95f092c8a9a4cb6ea035abb"
   ],
-  "split_dataset_reference": "week11-v01-93-scripted-candidate-not-frozen",
-  "status": "DRAFT_NOT_FROZEN",
-  "success_count": 93,
+  "split_dataset_reference": "week11-v01-94-mixed-frozen",
+  "status": "FROZEN",
+  "success_count": 94,
   "task_distribution": {
+    "panda_insertion": 1,
     "peg_insertion": 93
   },
-  "teleop_episode_count": 0,
-  "tooling_git_commit_at_draft": "1909e5fb1ce05be790873fa5b7fb31c0fe077c35"
+  "teleop_episode_count": 1,
+  "tooling_git_commit_at_draft": "815a12373e455b3040b1e5c7839aa2b53a2b3e07"
 }
