@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 from robustlearn.dataset_splits import (
     SplitError,
@@ -32,14 +33,15 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _load_json(path: Path) -> dict:
+def _load_json(path: Path) -> dict[str, Any]:
     _sha256(path)
-    data = json.loads(path.read_text(encoding="utf-8"))
-    _require(isinstance(data, dict), f"Invalid JSON object: {path}")
+    data: object = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise FreezeVerificationError(f"Invalid JSON object: {path}")
     return data
 
 
-def verify_dataset_snapshot(root: Path) -> dict:
+def verify_dataset_snapshot(root: Path) -> dict[str, object]:
     """Verify the exact episode and report inventory of a snapshot."""
     _require(
         root.is_dir() and not root.is_symlink(),
@@ -89,7 +91,8 @@ def verify_dataset_snapshot(root: Path) -> dict:
         )
 
     declared = manifest.get("episode_sha256")
-    _require(isinstance(declared, dict), "Missing episode checksums")
+    if not isinstance(declared, dict):
+        raise FreezeVerificationError("Missing episode checksums")
 
     actual_names = {p.name for p in episode_files}
     _require(
@@ -104,7 +107,8 @@ def verify_dataset_snapshot(root: Path) -> dict:
         )
 
     report_hashes = manifest.get("artifact_sha256")
-    _require(isinstance(report_hashes, dict), "Missing report checksums")
+    if not isinstance(report_hashes, dict):
+        raise FreezeVerificationError("Missing report checksums")
     _require(set(report_hashes) == set(reports), "Report inventory mismatch")
 
     for name in reports:
@@ -167,7 +171,8 @@ def verify_dataset_snapshot(root: Path) -> dict:
         ) from exc
 
     records = provenance.get("episodes")
-    _require(isinstance(records, list), "Missing provenance records")
+    if not isinstance(records, list):
+        raise FreezeVerificationError("Missing provenance records")
     _require(
         len(records) == len(episode_files),
         "Provenance episode count mismatch",
@@ -179,15 +184,24 @@ def verify_dataset_snapshot(root: Path) -> dict:
 
     provenance_names = set()
     for record in records:
-        _require(isinstance(record, dict), "Invalid provenance record")
-        name = record.get("curated_filename")
-        _require(name in actual_names, "Unknown provenance episode")
-        _require(name not in provenance_names, "Duplicate provenance episode")
+        if not isinstance(record, dict):
+            raise FreezeVerificationError("Invalid provenance record")
+        curated_filename = record.get("curated_filename")
+        if not isinstance(curated_filename, str):
+            raise FreezeVerificationError("Unknown provenance episode")
         _require(
-            record.get("curated_sha256") == declared[name],
-            f"Provenance checksum mismatch: {name}",
+            curated_filename in actual_names,
+            "Unknown provenance episode",
         )
-        provenance_names.add(name)
+        _require(
+            curated_filename not in provenance_names,
+            "Duplicate provenance episode",
+        )
+        _require(
+            record.get("curated_sha256") == declared[curated_filename],
+            f"Provenance checksum mismatch: {curated_filename}",
+        )
+        provenance_names.add(curated_filename)
 
     _require(
         provenance_names == actual_names,
