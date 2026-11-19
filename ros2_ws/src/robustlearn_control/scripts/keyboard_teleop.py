@@ -1327,8 +1327,27 @@ class KeyboardTeleop(Node):
         )
 
         if tracker is None or not tracker.settled:
+            if tracker is None:
+                details = 'tracker=missing'
+            else:
+                outstanding = getattr(
+                    tracker, 'outstanding_request_ids', 'unavailable'
+                )
+                uncertain = getattr(
+                    tracker, 'uncertain', 'unavailable'
+                )
+                cancel_rejected = getattr(
+                    tracker, 'cancellation_rejected_ids', 'unavailable'
+                )
+                details = (
+                    f'outstanding={outstanding} '
+                    f'uncertain={uncertain} '
+                    f'cancel_rejected={cancel_rejected}'
+                )
+
             self.get_logger().warning(
-                'Jog blocked: controller completion unverified.'
+                'Jog blocked: controller completion unverified. '
+                f'{details}'
             )
             return
 

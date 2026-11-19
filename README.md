@@ -1225,7 +1225,7 @@ Each frame records:
 - 6-axis wrist wrench:
   - force x/y/z
   - torque x/y/z
-- 7-dimensional expert joint-delta action
+- 7-dimensional submitted joint-position target in radians (absolute, not delta, for Week 11 collectors)
 - task success flag
 - task failure flag
 - termination flag
