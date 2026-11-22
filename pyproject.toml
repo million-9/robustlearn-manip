@@ -7,7 +7,6 @@ dependencies = [
     "mujoco>=3.12.0",
     "numpy>=2.5.2",
     "PyYAML>=6.0",
-    "torch>=2.15.0",
 ]
 
 [dependency-groups]
@@ -15,6 +14,21 @@ dev = [
     "mypy>=2.3.1",
     "pytest>=8,<9",
     "ruff>=0.16.5",
+]
+cpu = [
+    "torch==2.15.0",
+]
+cuda = [
+    "torch==2.14.1",
+]
+
+[tool.uv]
+default-groups = ["dev", "cpu"]
+conflicts = [
+    [
+        { group = "cpu" },
+        { group = "cuda" },
+    ],
 ]
 
 [build-system]
@@ -27,6 +41,12 @@ include = ["robustlearn*"]
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.ruff]
 line-length = 100
@@ -55,7 +75,10 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.uv.sources]
-torch = { index = "pytorch-cpu" }
+torch = [
+    { index = "pytorch-cpu", group = "cpu" },
+    { index = "pytorch-cu130", group = "cuda" },
+]
 
 [[tool.mypy.overrides]]
 module = ["mujoco"]
