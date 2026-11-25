@@ -1659,3 +1659,5 @@ for configuration, grouping limitations, and manifest verification.
 ## Behavior Cloning Training
 
 For reproducible training, checkpoint restoration, and baseline results, see the [Behavior Cloning training guide](docs/bc_training.md).
+
+For local MLflow tracking and offline BC evaluation, see the [BC experiment tracking guide](docs/bc_experiment_tracking.md).

@@ -21,6 +21,9 @@ cpu = [
 cuda = [
     "torch==2.14.1",
 ]
+tracking = [
+    "mlflow>=3,<4",
+]
 
 [tool.uv]
 default-groups = ["dev", "cpu"]
