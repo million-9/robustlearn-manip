@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import math
 from pathlib import Path
-
-from mlflow.tracking import MlflowClient
+from typing import Any
 
 
 def record_bc_experiment(
@@ -39,6 +39,16 @@ def record_bc_experiment(
             raise FileNotFoundError(checkpoint)
 
     tracking_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        tracking_module = importlib.import_module("mlflow.tracking")
+    except ImportError as exc:
+        raise RuntimeError(
+            "MLflow tracking requires the optional tracking dependency group"
+        ) from exc
+
+    MlflowClient: Any = tracking_module.MlflowClient
+
     database = (tracking_dir / "mlflow.db").resolve()
     tracking_uri = f"sqlite:///{database}"
     client = MlflowClient(tracking_uri=tracking_uri)
