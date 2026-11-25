@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "source_main_commit": "10725aa",
+  "benchmark_sha256": "e9bbb932a32903e890ea2ac5bf0b67caee38b782ed44ad1243c92b0d18d176b0",
+  "repeatability": {
+    "byte_identical": true,
+    "execution_count": 2
+  },
+  "configuration": {
+    "checkpoint_sha256": "d3497a3438e183130a66646856fc59c3bc406b4663add17b450791558f2c21b9",
+    "dataset_sha256": "eb28d409db76e18c6a8e6f6f0ccb49429f0271d4bf8a6f16881637ae0dd5db3f",
+    "evaluation_seeds": [
+      2026,
+      2027,
+      2028,
+      2029,
+      2030,
+      2031,
+      2032,
+      2033,
+      2034,
+      2035,
+      2036,
+      2037,
+      2038,
+      2039,
+      2040,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045
+    ],
+    "max_steps": 100,
+    "max_force_n": 50.0,
+    "domain_randomization": false,
+    "inference_device": "cpu",
+    "policy": "behavior_cloning",
+    "action_representation": "absolute_joint_position_rad"
+  },
+  "software": {
+    "python": "3.12.3",
+    "mujoco": "3.12.0",
+    "numpy": "2.5.2",
+    "torch": "2.15.0+cpu"
+  },
+  "summary": {
+    "episode_count": 20,
+    "seeds": [
+      2026,
+      2027,
+      2028,
+      2029,
+      2030,
+      2031,
+      2032,
+      2033,
+      2034,
+      2035,
+      2036,
+      2037,
+      2038,
+      2039,
+      2040,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045
+    ],
+    "success_count": 0,
+    "failure_count": 20,
+    "success_rate": 0.0,
+    "outcome_counts": {
+      "unsafe_action": 20
+    },
+    "failure_reason_counts": {
+      "BC prediction exceeds MuJoCo actuator control limits": 20
+    },
+    "rejected_action_count": 20,
+    "total_steps_executed": 20,
+    "mean_steps_executed": 1.0,
+    "zero_step_episode_count": 0,
+    "mean_completion_time_s": null,
+    "median_completion_time_s": null,
+    "completion_time_sample_count": 0,
+    "mean_recorded_peak_force_n": 2.384398623259353,
+    "max_recorded_peak_force_n": 2.384398623259353,
+    "peak_force_sample_count": 20,
+    "mean_action_change_rad": null,
+    "action_change_sample_count": 0,
+    "initial_observation_sample_count": 20,
+    "unique_initial_observation_count": 1,
+    "success_rate_ci95": null,
+    "confidence_interval_status": "not_reported_independent_scenarios_not_established"
+  },
+  "seed_2026": {
+    "checkpoint_sha256": "d3497a3438e183130a66646856fc59c3bc406b4663add17b450791558f2c21b9",
+    "dataset_sha256": "eb28d409db76e18c6a8e6f6f0ccb49429f0271d4bf8a6f16881637ae0dd5db3f",
+    "seed": 2026,
+    "max_steps": 100,
+    "max_force_n": 50.0,
+    "outcome": "unsafe_action",
+    "success": false,
+    "failure_reason": "BC prediction exceeds MuJoCo actuator control limits",
+    "steps_executed": 1,
+    "completion_time_s": null,
+    "elapsed_simulation_time_s": 0.01,
+    "max_observed_force_n": 2.384398623259353,
+    "mean_action_change_rad": null,
+    "rejected_action": {
+      "step": 2,
+      "observation": [
+        -0.0003778328828047961,
+        -0.0010587642900645733,
+        -0.00019983327365480363,
+        -1.576132893562317,
+        -0.0006403771694749594,
+        1.5710450410842896,
+        -0.7888118028640747,
+        -0.061234865337610245,
+        -0.1662725955247879,
+        -0.042598526924848557,
+        -1.0122456550598145,
+        -0.06063486635684967,
+        0.03166484832763672,
+        -0.42759034037590027,
+        0.0011021748650819063,
+        0.0004970749723725021,
+        -0.017591506242752075,
+        -1.048777461051941,
+        -0.24821291863918304,
+        -2.1269257068634033,
+        -0.008737861178815365,
+        0.041167933493852615,
+        0.0005555418320000172
+      ],
+      "policy_targets_rad": [
+        -0.1171075850725174,
+        -0.15893106162548065,
+        -0.08929944783449173,
+        -1.6495592594146729,
+        -0.05202484875917435,
+        -7.325173377990723,
+        -1.2696046829223633
+      ],
+      "joint_lower_limits_rad": [
+        -2.8973,
+        -1.7628,
+        -2.8973,
+        -3.0718,
+        -2.8973,
+        -0.0175,
+        -2.8973
+      ],
+      "joint_upper_limits_rad": [
+        2.8973,
+        1.7628,
+        2.8973,
+        -0.0698,
+        2.8973,
+        3.7525,
+        2.8973
+      ]
+    },
+    "trajectory": [
+      {
+        "step": 1,
+        "time_s": 0.01,
+        "observation": [
+          0.0,
+          0.0,
+          0.0,
+          -1.5707900524139404,
+          0.0,
+          1.5707900524139404,
+          -0.7853000164031982,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          5.219682748247578e-07,
+          4.8502619748835506e-33,
+          -0.01950242929160595,
+          -0.10236222296953201,
+          -0.012612094171345234,
+          0.004494517110288143,
+          -0.000503421644680202,
+          0.004371813032776117,
+          1.1384903473299346e-06
+        ],
+        "policy_targets_rad": [
+          -0.009002636186778545,
+          0.002870687283575535,
+          -0.007746197748929262,
+          -2.0320637226104736,
+          -0.007766337599605322,
+          0.7983821034431458,
+          -0.8375716805458069
+        ],
+        "applied_actuator_controls": [
+          -0.009002636186778545,
+          0.002870687283575535,
+          -0.007746197748929262,
+          -2.0320637226104736,
+          -0.007766337599605322,
+          0.7983821034431458,
+          -0.8375716805458069,
+          255.0
+        ],
+        "lateral_error_m": 0.0012090793430901468,
+        "insertion_depth_m": -0.01759150603075632,
+        "wrist_force_n": [
+          -0.24390242192023148,
+          -1.0408945613833387,
+          2.131292311079156
+        ],
+        "wrist_torque_nm": [
+          0.041192216813198956,
+          -0.008623237112900561,
+          -0.0005465870415869104
+        ],
+        "force_magnitude_n": 2.384398623259353,
+        "task_success": false,
+        "task_failure": false
+      }
+    ]
+  },
+  "limitations": [
+    "Different seeds do not establish independent scenarios.",
+    "Initial observation equality is checked exactly.",
+    "Recorded peak force excludes pre-action-only measurements.",
+    "Force is sampled at environment-step boundaries.",
+    "Completion times include successful episodes only.",
+    "Action smoothness excludes episodes with insufficient actions.",
+    "No independent-scenario confidence interval is claimed."
+  ]
+}
