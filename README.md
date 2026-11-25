@@ -1655,3 +1655,7 @@ indivisible groups prevent exact balancing.
 
 See [Week 11 dataset splits](docs/week11_dataset_splits.md)
 for configuration, grouping limitations, and manifest verification.
+
+## Behavior Cloning Training
+
+For reproducible training, checkpoint restoration, and baseline results, see the [Behavior Cloning training guide](docs/bc_training.md).
