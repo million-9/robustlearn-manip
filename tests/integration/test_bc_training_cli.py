@@ -156,3 +156,110 @@ def test_bc_cli_deterministic_and_never_loads_test_split(
             first_checkpoint["normalization"][name],
             second_checkpoint["normalization"][name],
         )
+
+
+
+def test_bc_cli_mlflow_tracking(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pytest.importorskip("mlflow")
+    from mlflow.tracking import MlflowClient
+
+    output = tmp_path / "checkpoints"
+    tracking = tmp_path / "tracking"
+
+    assert bc_train_cli.main([
+        "--dataset-root", str(DATASET_ROOT),
+        "--output-dir", str(output),
+        "--tracking-dir", str(tracking),
+        "--experiment-name", "bc-integration-test",
+        "--max-epochs", "1",
+        "--batch-size", "256",
+        "--seed", "42",
+        "--device", "cpu",
+        "--track-mlflow",
+    ]) == 0
+
+    summary = json.loads(capsys.readouterr().out)
+    run_id = summary["mlflow_run_id"]
+    metrics = summary["offline_validation_metrics"]
+
+    assert metrics["samples"] == 593
+    assert metrics["mae_rad"] >= 0
+    assert metrics["rmse_rad"] >= metrics["mae_rad"]
+    assert "joint_7_rmse_rad" in metrics
+
+    database = (tracking / "mlflow.db").resolve()
+    assert database.is_file()
+
+    client = MlflowClient(
+        tracking_uri=f"sqlite:///{database}"
+    )
+    run = client.get_run(run_id)
+
+    assert run.info.status == "FINISHED"
+    assert run.data.params["seed"] == "42"
+    assert run.data.params["dataset_sha256"] == (
+        summary["dataset_sha256"]
+    )
+    assert run.data.params["git_revision"]
+
+    assert run.data.metrics["mae_rad"] == pytest.approx(
+        metrics["mae_rad"]
+    )
+
+    for key in ("train_loss", "validation_loss"):
+        history = client.get_metric_history(run_id, key)
+        assert len(history) == 1
+        assert history[0].step == 1
+
+    artifacts = client.list_artifacts(run_id, "checkpoints")
+    assert {item.path for item in artifacts} == {
+        "checkpoints/best.pt",
+        "checkpoints/final.pt",
+    }
+
+    assert (output / "best.pt").is_file()
+    assert (output / "final.pt").is_file()
+
+
+
+def test_bc_tracked_offline_metrics_are_reproducible(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pytest.importorskip("mlflow")
+
+    summaries = []
+
+    for index in range(2):
+        output = tmp_path / f"run-{index}"
+        tracking = tmp_path / "tracking"
+
+        assert bc_train_cli.main([
+            "--dataset-root", str(DATASET_ROOT),
+            "--output-dir", str(output),
+            "--tracking-dir", str(tracking),
+            "--experiment-name", "bc-reproducibility",
+            "--max-epochs", "1",
+            "--batch-size", "256",
+            "--seed", "42",
+            "--device", "cpu",
+            "--track-mlflow",
+        ]) == 0
+
+        summaries.append(json.loads(capsys.readouterr().out))
+
+    first, second = summaries
+
+    assert first["mlflow_run_id"] != second["mlflow_run_id"]
+    assert first["dataset_sha256"] == second["dataset_sha256"]
+    assert first["train_losses"] == second["train_losses"]
+    assert first["validation_losses"] == second["validation_losses"]
+    assert (
+        first["offline_validation_metrics"]
+        == second["offline_validation_metrics"]
+    )
+
+    assert first["offline_validation_metrics"]["samples"] == 593

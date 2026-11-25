@@ -28,3 +28,8 @@ data/*
 models/*
 !models/README.md
 *.egg-info/
+
+# Local experiment tracking
+mlruns/
+mlartifacts/
+artifacts/
